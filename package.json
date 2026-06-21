@@ -1,0 +1,21 @@
+{
+  "name": "itch ttrpg discovery",
+  "scripts": {
+    "start": "vite --host",
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
+    "@vitejs/plugin-react": "^6.0.1",
+    "tailwindcss": "^4.2.4",
+    "vite": "^8.0.10",
+    "vite-plugin-svgr": "^5.2.0"
+  },
+  "dependencies": {
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  }
+}

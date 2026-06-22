@@ -228,7 +228,7 @@ function buildSearches(options = {}) {
         categorySlug: category.slug,
         term,
         sourceSearch: `tag-${term}`,
-        fetchedUrl: `https://itch.io/${category.slug}/newest/last-day/tag-${encodeURIComponent(term)}.xml`,
+        fetchedUrl: `https://itch.io/${category.slug}/newest/tag-${encodeURIComponent(term)}.xml`,
       });
     }
   }

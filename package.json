@@ -1,21 +1,26 @@
 {
-  "name": "itch ttrpg discovery",
+  "name": "itch_ttrpg_discovery",
   "scripts": {
     "start": "vite --host",
     "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy",
+    "worker:d1:migrate": "wrangler d1 migrations apply itch-rpg-feed --remote"
   },
   "type": "module",
   "devDependencies": {
-    "@tailwindcss/vite": "^4.2.4",
-    "@vitejs/plugin-react": "^6.0.1",
-    "tailwindcss": "^4.2.4",
-    "vite": "^8.0.10",
-    "vite-plugin-svgr": "^5.2.0"
+    "@tailwindcss/vite": "^4.3.1",
+    "@vitejs/plugin-react": "^6.0.2",
+    "tailwindcss": "^4.3.1",
+    "vite": "^8.0.16",
+    "vite-plugin-svgr": "^5.2.0",
+    "wrangler": "^4.103.0"
   },
   "dependencies": {
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "fast-xml-parser": "^5.9.3",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   }
 }

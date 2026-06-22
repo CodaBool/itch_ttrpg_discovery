@@ -1,0 +1,15 @@
+name = "itch-rpg-feed-worker"
+main = "worker/src/index.js"
+compatibility_date = "2026-06-22"
+
+[triggers]
+crons = ["*/2 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "itch-rpg-feed"
+migrations_dir = "./worker/migrations"
+database_id = "9c508136-520e-4731-aba3-321d40cc13c6"
+
+[vars]
+MAX_SEARCHES_PER_RUN = "120"

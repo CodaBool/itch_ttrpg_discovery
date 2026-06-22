@@ -2,57 +2,59 @@ import { useEffect, useMemo, useState } from "react";
 import FilterPill from "./components/FilterPill";
 import ItemCard from "./components/ItemCard";
 
-const PRIMARY_TAGS = [
-    "horror",
-    "role-playing",
-    "tabletop",
-    "zine",
-    "one-page",
-    "rules-lite",
-    "supplement",
-    "fanzine",
-    "micro-rpg",
-    "vtt",
-    "ttrpg",
+const SYSTEM_FILTERS = [
+    { key: "mothership", label: "Mothership" },
+    { key: "liminal-horror", label: "Liminal Horror" },
+    { key: "mork-borg", label: "Mork Borg" },
+    { key: "delta-green", label: "Delta Green" },
+    { key: "call-of-cthulhu", label: "Call of Cthulhu" },
+    { key: "triangle-agency", label: "Triangle Agency" },
+    { key: "mausritter", label: "Mausritter" },
+    { key: "cairn", label: "Cairn" },
+    { key: "into-the-odd", label: "Into the Odd" },
+    { key: "fist", label: "FIST" },
 ];
 
-// Less popular tags: intentionally included in the same array so discovery still catches them.
-const SECONDARY_TAGS = [
-    "osr",
-    "tabletop",
-    "body-horror",
-    "liminal-horror",
-    "mothership",
-    "mothership-rpg",
-    "tabletop-role-playing-game",
-    "foundryvtt",
-    "panic-engine",
-    "generation",
-    "generated",
-    "generator",
-    "tool",
-];
-
-const GENRE_TAGS = ["genre-rpg", "genre-adventure"];
-const TAGS = [...new Set([...PRIMARY_TAGS, ...SECONDARY_TAGS, ...GENRE_TAGS])];
-
-const CATEGORIES = [
-    { name: "Assets", slug: "game-assets" },
-    { name: "Physical Game", slug: "physical-games" },
-    { name: "Other", slug: "misc" },
-    { name: "Game mod", slug: "game-mods" },
-    { name: "Tool", slug: "tools" },
-];
+const TOOL_LIKE_TAGS = ["tool", "generator", "generated", "generation"];
+const HORROR_LIKE_TAGS = ["horror", "body-horror", "liminal-horror"];
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+
+function readSourceTags(source) {
+    if (!source || typeof source !== "object") return [];
+
+    if (Array.isArray(source.tags)) {
+        return source.tags.map((tag) => String(tag).toLowerCase());
+    }
+
+    if (typeof source.term === "string") {
+        return source.term
+            .split("+")
+            .map((tag) => tag.trim().toLowerCase())
+            .filter(Boolean);
+    }
+
+    return [];
+}
+
+function hasAnyTag(item, wantedTags) {
+    const wanted = new Set(wantedTags.map((tag) => tag.toLowerCase()));
+    return item.source.some((source) => {
+        const tags = readSourceTags(source);
+        return tags.some((tag) => wanted.has(tag));
+    });
+}
+
+function hasCategory(item, slug) {
+    return item.source.some((source) => source.category_slug === slug);
+}
 
 export default function App() {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
-    const [activeTag, setActiveTag] = useState("");
-    const [activeCategory, setActiveCategory] = useState("");
+    const [activeFilter, setActiveFilter] = useState("all");
 
     useEffect(() => {
         const controller = new AbortController();
@@ -62,9 +64,7 @@ export default function App() {
             setError("");
 
             try {
-                const params = new URLSearchParams({ limit: "160" });
-                if (activeTag) params.set("tag", activeTag);
-                if (activeCategory) params.set("category", activeCategory);
+                const params = new URLSearchParams({ limit: "250" });
                 if (search.trim()) params.set("q", search.trim());
 
                 const response = await fetch(`${API_BASE}/api/items?${params.toString()}`, {
@@ -88,15 +88,48 @@ export default function App() {
 
         load();
         return () => controller.abort();
-    }, [search, activeTag, activeCategory]);
+    }, [search]);
+
+    const visibleItems = useMemo(() => {
+        if (activeFilter === "all") return items;
+
+        if (activeFilter.startsWith("system:")) {
+            const systemTag = activeFilter.split(":")[1] || "";
+            return items.filter((item) => hasAnyTag(item, [systemTag]));
+        }
+
+        if (activeFilter === "tool") {
+            return items.filter((item) => hasCategory(item, "tools") || hasAnyTag(item, TOOL_LIKE_TAGS));
+        }
+
+        if (activeFilter === "asset") {
+            return items.filter((item) => hasCategory(item, "game-assets"));
+        }
+
+        if (activeFilter === "horror") {
+            return items.filter((item) => hasAnyTag(item, HORROR_LIKE_TAGS));
+        }
+
+        if (activeFilter === "other") {
+            return items.filter((item) => {
+                const isTool = hasCategory(item, "tools") || hasAnyTag(item, TOOL_LIKE_TAGS);
+                const isAsset = hasCategory(item, "game-assets");
+                const isHorror = hasAnyTag(item, HORROR_LIKE_TAGS);
+                const isSystem = SYSTEM_FILTERS.some((system) => hasAnyTag(item, [system.key]));
+                return !isTool && !isAsset && !isHorror && !isSystem;
+            });
+        }
+
+        return items;
+    }, [activeFilter, items]);
 
     const stats = useMemo(() => {
         return {
-            total: items.length,
-            withImages: items.filter((i) => Boolean(i.image_url)).length,
-            uniqueAuthors: new Set(items.map((i) => i.author).filter(Boolean)).size,
+            total: visibleItems.length,
+            withImages: visibleItems.filter((i) => Boolean(i.image_url)).length,
+            uniqueAuthors: new Set(visibleItems.map((i) => i.author).filter(Boolean)).size,
         };
-    }, [items]);
+    }, [visibleItems]);
 
     return (
         <main className="min-h-screen bg-[radial-gradient(circle_at_15%_0%,rgba(249,115,22,.2),transparent_45%),radial-gradient(circle_at_90%_20%,rgba(14,165,233,.18),transparent_40%),linear-gradient(180deg,#020617_0%,#0f172a_100%)] px-4 pb-14 pt-8 text-slate-100 md:px-8">
@@ -109,7 +142,7 @@ export default function App() {
                         Fresh indie RPGs, tools, zines, and weird tabletop experiments
                     </h1>
                     <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-300 md:text-base">
-                        This fan feed pulls matching entries from itch XML sources every ~2 minutes and merges all source hits per item URL.
+                        This fan feed pulls trusted tag combinations from itch XML sources every ~2 minutes and merges all source hits per item URL.
                     </p>
 
                     <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -138,32 +171,31 @@ export default function App() {
                     />
 
                     <div className="mt-5">
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Category</p>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Systems</p>
                         <div className="flex flex-wrap gap-2">
-                            <FilterPill label="All" active={!activeCategory} onClick={() => setActiveCategory("")} />
-                            {CATEGORIES.map((c) => (
+                            <FilterPill
+                                label="All"
+                                active={activeFilter === "all"}
+                                onClick={() => setActiveFilter("all")}
+                            />
+                            {SYSTEM_FILTERS.map((system) => (
                                 <FilterPill
-                                    key={c.slug}
-                                    label={c.name}
-                                    active={activeCategory === c.slug}
-                                    onClick={() => setActiveCategory((prev) => (prev === c.slug ? "" : c.slug))}
+                                    key={system.key}
+                                    label={system.label}
+                                    active={activeFilter === `system:${system.key}`}
+                                    onClick={() => setActiveFilter(`system:${system.key}`)}
                                 />
                             ))}
                         </div>
                     </div>
 
                     <div className="mt-5">
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Tags & genres</p>
-                        <div className="flex max-h-32 flex-wrap gap-2 overflow-y-auto pr-1">
-                            <FilterPill label="All" active={!activeTag} onClick={() => setActiveTag("")} />
-                            {TAGS.map((tag) => (
-                                <FilterPill
-                                    key={tag}
-                                    label={tag}
-                                    active={activeTag === tag}
-                                    onClick={() => setActiveTag((prev) => (prev === tag ? "" : tag))}
-                                />
-                            ))}
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Focus</p>
+                        <div className="flex flex-wrap gap-2">
+                            <FilterPill label="Tool" active={activeFilter === "tool"} onClick={() => setActiveFilter("tool")} />
+                            <FilterPill label="Asset" active={activeFilter === "asset"} onClick={() => setActiveFilter("asset")} />
+                            <FilterPill label="Horror" active={activeFilter === "horror"} onClick={() => setActiveFilter("horror")} />
+                            <FilterPill label="Other" active={activeFilter === "other"} onClick={() => setActiveFilter("other")} />
                         </div>
                     </div>
                 </section>
@@ -173,8 +205,8 @@ export default function App() {
 
                 {!loading && !error ? (
                     <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                        {items.length ? (
-                            items.map((item) => <ItemCard key={item.url} item={item} />)
+                        {visibleItems.length ? (
+                            visibleItems.map((item) => <ItemCard key={item.url} item={item} />)
                         ) : (
                             <p className="col-span-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
                                 No entries matched your filters.

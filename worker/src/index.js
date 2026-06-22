@@ -1,47 +1,59 @@
 import { XMLParser } from "fast-xml-parser";
 
-const PRIMARY_TAGS = [
+const PAIR_TAGS = [
   "horror",
-  "role-playing",
-  "tabletop",
-  "zine",
-  "one-page",
-  "rules-lite",
-  "supplement",
-  "fanzine",
-  "micro-rpg",
-  "vtt",
-  "ttrpg",
-];
-
-// Less popular tags: keep these in the same search array as requested.
-const SECONDARY_TAGS = [
-  "osr",
-  "tabletop",
   "body-horror",
-  "liminal-horror",
-  "mothership",
-  "mothership-rpg",
-  "tabletop-role-playing-game",
-  "foundryvtt",
-  "panic-engine",
   "generation",
   "generated",
   "generator",
   "tool",
 ];
 
-const GENRE_TAGS = ["genre-rpg", "genre-adventure"];
+const SOLO_TAGS = [
+  "zine",
+  "one-page",
+  "rules-lite",
+  "supplement",
+  "fanzine",
+  "micro-rpg",
+  "ttrpg",
+  "osr",
+  "liminal-horror",
+  "mothership",
+  "mothership-rpg",
+  "panic-engine",
+  "mork-borg",
+  "delta-green",
+  "call-of-cthulhu",
+  "triangle-agency",
+  "mausritter",
+  "cairn",
+  "into-the-odd",
+  "fist",
+];
 
 const CATEGORIES = [
   { name: "Assets", slug: "game-assets" },
   { name: "Physical Game", slug: "physical-games" },
-  { name: "Other", slug: "misc" },
-  { name: "Game mod", slug: "game-mods" },
   { name: "Tool", slug: "tools" },
 ];
 
-const SEARCH_TERMS = [...new Set([...PRIMARY_TAGS, ...SECONDARY_TAGS, ...GENRE_TAGS])];
+const SEARCH_DEFINITIONS = [
+  ...PAIR_TAGS.map((tag) => ({
+    type: "pair",
+    tags: ["ttrpg", tag],
+    term: `ttrpg+${tag}`,
+  })),
+  ...SOLO_TAGS.map((tag) => ({
+    type: "solo",
+    tags: [tag],
+    term: tag,
+  })),
+];
+
+const SEARCH_TERMS = [
+  ...new Set(SEARCH_DEFINITIONS.flatMap((definition) => definition.tags)),
+];
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -110,6 +122,7 @@ function normalizeSource(source) {
     category: source.category,
     category_slug: source.categorySlug,
     term: source.term,
+    tags: Array.isArray(source.tags) ? source.tags : [],
     source_search: source.sourceSearch,
     fetched_url: source.fetchedUrl,
   };
@@ -195,8 +208,7 @@ function applyDebugSamplingOptions(options) {
   return {
     ...options,
     tag: sampledTags.join(","),
-    maxSearches: 1,
-    // maxSearches: options.maxSearches ?? 25,
+    maxSearches: options.maxSearches ?? 25,
     sampled_tags: sampledTags,
   };
 }
@@ -208,9 +220,9 @@ function normalizeCategoryInput(categoryRaw) {
   return CATEGORIES.filter((c) => wanted.has(c.slug.toLowerCase()) || wanted.has(c.name.toLowerCase()));
 }
 
-function normalizeTermInput(tagRaw) {
+function normalizeTagInput(tagRaw) {
   const wanted = new Set(parseList(tagRaw).map((v) => v.toLowerCase()));
-  if (!wanted.size) return SEARCH_TERMS;
+  if (!wanted.size) return [];
 
   return SEARCH_TERMS.filter((term) => wanted.has(term.toLowerCase()));
 }
@@ -218,17 +230,28 @@ function normalizeTermInput(tagRaw) {
 function buildSearches(options = {}) {
   const maxSearches = options.maxSearches ?? Number.POSITIVE_INFINITY;
   const selectedCategories = options.categories ?? CATEGORIES;
-  const selectedTerms = options.terms ?? SEARCH_TERMS;
+  const selectedTags = options.tags ?? [];
+  const selectedTagSet = new Set(selectedTags.map((tag) => tag.toLowerCase()));
   const searches = [];
 
   for (const category of selectedCategories) {
-    for (const term of selectedTerms) {
+    for (const definition of SEARCH_DEFINITIONS) {
+      const shouldInclude =
+        selectedTagSet.size === 0 ||
+        definition.tags.some((tag) => selectedTagSet.has(tag.toLowerCase()));
+
+      if (!shouldInclude) continue;
+
+      const sourceSearch = definition.tags.map((tag) => `tag-${tag}`).join("/");
       searches.push({
         category: category.name,
         categorySlug: category.slug,
-        term,
-        sourceSearch: `tag-${term}`,
-        fetchedUrl: `https://itch.io/${category.slug}/newest/tag-${encodeURIComponent(term)}.xml`,
+        term: definition.term,
+        tags: definition.tags,
+        sourceSearch,
+        fetchedUrl: `https://itch.io/${category.slug}/newest/${definition.tags
+          .map((tag) => `tag-${encodeURIComponent(tag)}`)
+          .join("/")}.xml`,
       });
     }
   }
@@ -307,10 +330,129 @@ async function upsertItem(env, item, source) {
   return { inserted: 0, updated: 1 };
 }
 
+async function readIngestionCursor(env) {
+  const row = await env.DB.prepare("SELECT value FROM ingest_state WHERE key = ?")
+    .bind("search_cursor")
+    .first();
+
+  const cursor = Number(row?.value || "0");
+  if (!Number.isFinite(cursor) || cursor < 0) return 0;
+  return Math.floor(cursor);
+}
+
+async function writeIngestionCursor(env, nextCursor) {
+  await env.DB.prepare(
+    `INSERT INTO ingest_state (key, value, updated_at)
+     VALUES (?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(key) DO UPDATE SET
+       value = excluded.value,
+       updated_at = CURRENT_TIMESTAMP`
+  )
+    .bind("search_cursor", String(nextCursor))
+    .run();
+}
+
+async function runSingleSearch(env, search, options = {}) {
+  const dryRun = toBoolean(options.dryRun, false);
+  const includeDebug = toBoolean(options.includeDebug, false);
+  const previewItemsPerSearch = toBoundedInt(options.previewItemsPerSearch, 0, 20, 3);
+
+  const summary = {
+    started_at: new Date().toISOString(),
+    dry_run: dryRun,
+    processed_search: normalizeSource(search),
+    items_seen: 0,
+    inserted: 0,
+    updated: 0,
+    failures: [],
+  };
+
+  if (includeDebug) {
+    summary.search_debug = [];
+  }
+
+  try {
+    const response = await fetch(search.fetchedUrl, {
+      headers: { "user-agent": "itch-rpg-feed-worker/1.0" },
+    });
+
+    if (!response.ok) {
+      summary.failures.push({
+        fetched_url: search.fetchedUrl,
+        status: response.status,
+      });
+      summary.finished_at = new Date().toISOString();
+      return summary;
+    }
+
+    const xml = await response.text();
+    const parsedItems = parseXmlItems(xml, search.fetchedUrl);
+    summary.items_seen = parsedItems.length;
+
+    if (includeDebug) {
+      summary.search_debug.push({
+        ...normalizeSource(search),
+        fetched_url: search.fetchedUrl,
+        item_count: parsedItems.length,
+        preview_items: parsedItems.slice(0, previewItemsPerSearch).map(itemPreview),
+      });
+    }
+
+    if (!dryRun) {
+      for (const item of parsedItems) {
+        const result = await upsertItem(env, item, search);
+        summary.inserted += result.inserted;
+        summary.updated += result.updated;
+      }
+    }
+  } catch (error) {
+    summary.failures.push({
+      fetched_url: search.fetchedUrl,
+      error: error instanceof Error ? error.message : "unknown error",
+    });
+  }
+
+  summary.finished_at = new Date().toISOString();
+  return summary;
+}
+
+async function runIngestionStep(env, options = {}) {
+  const categories = CATEGORIES;
+  const tags = [];
+  const searches = buildSearches({ categories, tags });
+
+  if (!searches.length) {
+    return {
+      started_at: new Date().toISOString(),
+      dry_run: toBoolean(options.dryRun, false),
+      total_searches: 0,
+      processed_index: null,
+      next_index: null,
+      failures: [{ error: "No searches available to process" }],
+      finished_at: new Date().toISOString(),
+    };
+  }
+
+  const cursor = await readIngestionCursor(env);
+  const processedIndex = cursor % searches.length;
+  const nextIndex = (processedIndex + 1) % searches.length;
+  const search = searches[processedIndex];
+
+  const result = await runSingleSearch(env, search, options);
+  await writeIngestionCursor(env, nextIndex);
+
+  return {
+    ...result,
+    total_searches: searches.length,
+    processed_index: processedIndex,
+    next_index: nextIndex,
+  };
+}
+
 async function runIngestion(env, options = {}) {
   const maxSearches = toBoundedInt(options.maxSearches ?? env.MAX_SEARCHES_PER_RUN, 1, 2000, 120);
   const categories = normalizeCategoryInput(options.category);
-  const terms = normalizeTermInput(options.tag);
+  const tags = normalizeTagInput(options.tag);
   const dryRun = toBoolean(options.dryRun, false);
   const includeDebug = toBoolean(options.includeDebug, false);
   const previewItemsPerSearch = toBoundedInt(options.previewItemsPerSearch, 0, 20, 3);
@@ -318,14 +460,14 @@ async function runIngestion(env, options = {}) {
   const searches = buildSearches({
     maxSearches,
     categories,
-    terms,
+    tags,
   });
 
   const summary = {
     started_at: new Date().toISOString(),
     dry_run: dryRun,
     selected_categories: categories.map((c) => c.slug),
-    selected_terms: terms,
+    selected_terms: tags,
     searches_attempted: searches.length,
     searches_succeeded: 0,
     searches_failed: 0,
@@ -407,18 +549,18 @@ function extractIngestionOptions(request, body = null) {
 function listSearches(request) {
   const options = extractIngestionOptions(request);
   const categories = normalizeCategoryInput(options.category);
-  const terms = normalizeTermInput(options.tag);
+  const tags = normalizeTagInput(options.tag);
   const maxSearches = toBoundedInt(options.maxSearches, 1, 2000, 120);
   const searches = buildSearches({
     maxSearches,
     categories,
-    terms,
+    tags,
   });
 
   return json({
     count: searches.length,
     selected_categories: categories.map((c) => c.slug),
-    selected_terms: terms,
+    selected_terms: tags,
     searches,
   });
 }
@@ -533,7 +675,7 @@ export default {
       }
 
       const options = extractIngestionOptions(request, body);
-      const summary = await runIngestion(env, options);
+      const summary = await runIngestionStep(env, options);
       return json(summary);
     }
 
@@ -558,6 +700,6 @@ export default {
   },
 
   async scheduled(_event, env, ctx) {
-    ctx.waitUntil(runIngestion(env));
+    ctx.waitUntil(runIngestionStep(env));
   },
 };

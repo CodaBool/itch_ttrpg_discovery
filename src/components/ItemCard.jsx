@@ -13,7 +13,13 @@ function formatSourceTerm(term) {
   const value = (term || "").trim();
   if (!value) return "unknown";
 
-  return value.startsWith("ttrpg+") ? value.slice("ttrpg+".length) : value;
+  const normalized = value.startsWith("ttrpg+") ? value.slice("ttrpg+".length) : value;
+  return normalized.replace(/-/g, " ");
+}
+
+function formatAuthorName(author) {
+  const value = (author || "unknown author").trim();
+  return value.replace(/-/g, " ");
 }
 
 function openInNewTab(url) {
@@ -46,12 +52,12 @@ export default function ItemCard({ item }) {
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/70 to-transparent opacity-0 transition group-hover:opacity-100" />
 
       {item.image_url ? (
-        <div className="mb-3 overflow-hidden rounded-xl border border-white/10 bg-black/20">
+        <div className="mb-3 aspect-[315/250] overflow-hidden rounded-xl border border-white/10 bg-black/30">
           <img
             src={item.image_url}
             alt={item.title}
             loading="lazy"
-            className="h-44 w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+            className="h-full w-full object-contain"
           />
         </div>
       ) : null}
@@ -87,10 +93,10 @@ export default function ItemCard({ item }) {
             onAuxClick={(event) => event.stopPropagation()}
             className="inline-flex items-center justify-center rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 transition hover:border-white/40"
           >
-            {item.author || "unknown author"}
+            {formatAuthorName(item.author)}
           </a>
         ) : (
-          <span>{item.author || "unknown author"}</span>
+          <span>{formatAuthorName(item.author)}</span>
         )}
       </div>
     </article>

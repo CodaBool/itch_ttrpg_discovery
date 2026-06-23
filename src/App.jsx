@@ -207,6 +207,32 @@ export default function App() {
     const [selectedTags, setSelectedTags] = useState(() =>
         loadStoredArray(STORAGE_KEYS.tags, NON_SYSTEM_TAGS, NON_SYSTEM_TAGS)
     );
+    const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+
+    const availableSystems = useMemo(() => {
+        const available = new Set();
+
+        items.forEach((item) => {
+            if (!hasCategory(item, selectedCategory)) return;
+
+            const tags = itemTagSet(item);
+
+            SYSTEM_FILTERS.forEach((system) => {
+                const matchTags = getSystemMatchTags(system.key);
+                if (matchTags.some((tag) => tags.has(tag))) {
+                    available.add(system.key);
+                }
+            });
+        });
+
+        return available;
+    }, [items, selectedCategory]);
+
+    const visibleSystemFilters = useMemo(() => {
+        return SYSTEM_FILTERS.filter(
+            (system) => system.key === selectedSystem || availableSystems.has(system.key)
+        );
+    }, [availableSystems, selectedSystem]);
 
     useEffect(() => {
         // Cleanup old localStorage values from earlier UI versions.
@@ -222,6 +248,12 @@ export default function App() {
         if (typeof window === "undefined") return;
         window.localStorage.setItem(STORAGE_KEYS.system, JSON.stringify(selectedSystem));
     }, [selectedSystem]);
+
+    useEffect(() => {
+        if (!selectedSystem) return;
+        if (availableSystems.has(selectedSystem)) return;
+        setSelectedSystem("");
+    }, [selectedSystem, availableSystems]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -323,14 +355,6 @@ export default function App() {
             <section className="mx-auto w-full max-w-7xl">
 
                 <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-2 backdrop-blur-sm md:p-5">
-                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Search</label>
-                    <input
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search title or description"
-                        className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-orange-300/60"
-                    />
-
                     <div className="mt-5">
                         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Category</p>
                         <div className="flex flex-wrap gap-2">
@@ -348,7 +372,7 @@ export default function App() {
                     <div className="mt-5">
                         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Systems</p>
                         <div className="flex flex-wrap gap-2">
-                            {SYSTEM_FILTERS.map((system) => (
+                            {visibleSystemFilters.map((system) => (
                                 <FilterPill
                                     key={system.key}
                                     label={system.label}
@@ -359,17 +383,56 @@ export default function App() {
                         </div>
                     </div>
 
-                    <div className="mt-5">
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Tags</p>
-                        <div className="flex flex-wrap gap-2">
-                            {NON_SYSTEM_TAGS.map((tag) => (
-                                <FilterPill
-                                    key={tag}
-                                    label={tag}
-                                    active={selectedTags.includes(tag)}
-                                    onClick={() => setSelectedTags((prev) => toggleValue(prev, tag))}
+                    <div className="mt-5 border-t border-white/10 pt-4">
+                        <button
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-200 transition hover:border-white/20"
+                            aria-expanded={isAdvancedOpen}
+                            aria-controls="advanced-filters"
+                            onClick={() => setIsAdvancedOpen((prev) => !prev)}
+                        >
+                            <span>Advanced</span>
+                            <svg
+                                viewBox="0 0 20 20"
+                                fill="none"
+                                aria-hidden="true"
+                                className={[
+                                    "h-4 w-4 text-slate-300 transition-transform duration-200",
+                                    isAdvancedOpen ? "rotate-180" : "rotate-0",
+                                ].join(" ")}
+                            >
+                                <path
+                                    d="M5 7.5L10 12.5L15 7.5"
+                                    stroke="currentColor"
+                                    strokeWidth="1.8"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
                                 />
-                            ))}
+                            </svg>
+                        </button>
+
+                        <div id="advanced-filters" className={isAdvancedOpen ? "mt-3 space-y-4" : "hidden"}>
+                            <div>
+                                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Search</label>
+                                <input
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Search title or description"
+                                    className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-orange-300/60"
+                                />
+                            </div>
+
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Tags</p>
+                            <div className="flex flex-wrap gap-2">
+                                {NON_SYSTEM_TAGS.map((tag) => (
+                                    <FilterPill
+                                        key={tag}
+                                        label={tag}
+                                        active={selectedTags.includes(tag)}
+                                        onClick={() => setSelectedTags((prev) => toggleValue(prev, tag))}
+                                    />
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </section>

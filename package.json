@@ -5,6 +5,7 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
+    "local": "node --env-file=../.env local.mjs",
     "worker:dev": "wrangler dev",
     "worker:deploy": "wrangler deploy",
     "worker:deploy-frontend": "wrangler deploy --config wrangler.frontend.toml",
@@ -15,6 +16,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.1",
     "@vitejs/plugin-react": "^6.0.2",
+    "puppeteer": "^24.10.2",
     "tailwindcss": "^4.3.1",
     "vite": "^8.0.16",
     "vite-plugin-svgr": "^5.2.0",

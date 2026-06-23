@@ -62,6 +62,8 @@ const STORAGE_KEYS = {
     category: "itch-feed:selected-category",
     system: "itch-feed:selected-system",
     tags: "itch-feed:selected-tags",
+    hiddenUrls: "itch-feed:hidden-urls",
+    blockedAuthors: "itch-feed:blocked-authors",
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://itch-ttrpg-discovery.codabool.workers.dev";
@@ -121,6 +123,22 @@ function loadStoredSystemValue() {
     }
 }
 
+function loadStoredStringArray(key) {
+    if (typeof window === "undefined") return [];
+
+    try {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .map((value) => String(value || "").trim())
+            .filter(Boolean);
+    } catch {
+        return [];
+    }
+}
+
 function toggleValue(list, value) {
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
@@ -169,6 +187,10 @@ function parseItemDate(item) {
     return parsed;
 }
 
+function normalizeAuthorKey(author) {
+    return String(author || "").trim().toLowerCase();
+}
+
 function getTimeBucket(item, now = new Date()) {
     const d = parseItemDate(item);
     if (!d) return "beyond";
@@ -208,6 +230,11 @@ export default function App() {
         loadStoredArray(STORAGE_KEYS.tags, NON_SYSTEM_TAGS, NON_SYSTEM_TAGS)
     );
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+    const [hiddenUrls, setHiddenUrls] = useState(() => loadStoredStringArray(STORAGE_KEYS.hiddenUrls));
+    const [blockedAuthors, setBlockedAuthors] = useState(() => loadStoredStringArray(STORAGE_KEYS.blockedAuthors));
+    const [interactionMode, setInteractionMode] = useState("none");
+    const [itemActionState, setItemActionState] = useState({});
+    const [isDesktopTools, setIsDesktopTools] = useState(false);
 
     const availableSystems = useMemo(() => {
         const available = new Set();
@@ -261,6 +288,31 @@ export default function App() {
     }, [selectedTags]);
 
     useEffect(() => {
+        if (typeof window === "undefined") return;
+        window.localStorage.setItem(STORAGE_KEYS.hiddenUrls, JSON.stringify(hiddenUrls));
+    }, [hiddenUrls]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        window.localStorage.setItem(STORAGE_KEYS.blockedAuthors, JSON.stringify(blockedAuthors));
+    }, [blockedAuthors]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+
+        const media = window.matchMedia("(min-width: 768px) and (pointer: fine)");
+        const apply = () => {
+            const enabled = media.matches;
+            setIsDesktopTools(enabled);
+            if (!enabled) setInteractionMode("none");
+        };
+
+        apply();
+        media.addEventListener("change", apply);
+        return () => media.removeEventListener("change", apply);
+    }, []);
+
+    useEffect(() => {
         const controller = new AbortController();
 
         async function load() {
@@ -294,11 +346,19 @@ export default function App() {
         return () => controller.abort();
     }, [search]);
 
+    const hiddenUrlSet = useMemo(() => new Set(hiddenUrls), [hiddenUrls]);
+    const blockedAuthorSet = useMemo(() => new Set(blockedAuthors), [blockedAuthors]);
+
     const visibleItems = useMemo(() => {
         return items.filter((item) => {
             const categoryMatch = hasCategory(item, selectedCategory);
 
             if (!categoryMatch) return false;
+
+            if (hiddenUrlSet.has(item.url)) return false;
+
+            const authorKey = normalizeAuthorKey(item.author);
+            if (authorKey && blockedAuthorSet.has(authorKey)) return false;
 
             const tags = itemTagSet(item);
 
@@ -310,7 +370,56 @@ export default function App() {
             if (selectedTags.length === 0) return true;
             return selectedTags.some((tag) => tags.has(tag));
         });
-    }, [items, selectedCategory, selectedSystem, selectedTags]);
+    }, [items, selectedCategory, selectedSystem, selectedTags, hiddenUrlSet, blockedAuthorSet]);
+
+    function runItemAction(item, mode) {
+        const animationType = mode === "block-author" ? "cut" : "stamp";
+        const timeoutMs = animationType === "cut" ? 430 : 380;
+
+        setItemActionState((prev) => ({ ...prev, [item.url]: animationType }));
+
+        window.setTimeout(() => {
+            if (mode === "hide-item") {
+                setHiddenUrls((prev) => (prev.includes(item.url) ? prev : [...prev, item.url]));
+            }
+
+            if (mode === "block-author") {
+                const authorKey = normalizeAuthorKey(item.author);
+                if (authorKey) {
+                    setBlockedAuthors((prev) => (prev.includes(authorKey) ? prev : [...prev, authorKey]));
+                }
+            }
+
+            setItemActionState((prev) => {
+                const next = { ...prev };
+                delete next[item.url];
+                return next;
+            });
+        }, timeoutMs);
+    }
+
+    function handleItemToolAction(item) {
+        if (!isDesktopTools || interactionMode === "none") return;
+
+        if (interactionMode === "hide-item") {
+            runItemAction(item, "hide-item");
+            return;
+        }
+
+        if (interactionMode === "block-author") {
+            const authorKey = normalizeAuthorKey(item.author);
+            if (!authorKey) return;
+            runItemAction(item, "block-author");
+        }
+    }
+
+    function clearHidden() {
+        setHiddenUrls([]);
+    }
+
+    function clearBlockedAuthors() {
+        setBlockedAuthors([]);
+    }
 
     const stats = useMemo(() => {
         return {
@@ -351,7 +460,13 @@ export default function App() {
     const showTimelineLayout = groupedBuckets.length > 1;
 
     return (
-        <main className="min-h-screen bg-[radial-gradient(circle_at_15%_0%,rgba(249,115,22,.2),transparent_45%),radial-gradient(circle_at_90%_20%,rgba(14,165,233,.18),transparent_40%),linear-gradient(180deg,#020617_0%,#0f172a_100%)] px-4 pb-14 pt-8 text-slate-100 md:px-8">
+        <main
+            className={[
+                "min-h-screen bg-[radial-gradient(circle_at_15%_0%,rgba(249,115,22,.2),transparent_45%),radial-gradient(circle_at_90%_20%,rgba(14,165,233,.18),transparent_40%),linear-gradient(180deg,#020617_0%,#0f172a_100%)] px-4 pb-14 pt-8 text-slate-100 md:px-8",
+                isDesktopTools && interactionMode === "block-author" ? "tool-mode-block" : "",
+                isDesktopTools && interactionMode === "hide-item" ? "tool-mode-stamp" : "",
+            ].join(" ")}
+        >
             <section className="mx-auto w-full max-w-7xl">
 
                 <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-2 backdrop-blur-sm md:p-5">
@@ -433,9 +548,83 @@ export default function App() {
                                     />
                                 ))}
                             </div>
+
+                            {isDesktopTools ? (
+                                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Seen Items</p>
+                                    <div className="flex items-center justify-between gap-3 text-xs text-slate-200">
+                                        <span>{hiddenUrls.length} hidden</span>
+                                        <button
+                                            type="button"
+                                            onClick={clearHidden}
+                                            className="rounded border border-white/20 px-2 py-1 uppercase tracking-[0.12em] text-slate-200 hover:border-white/40"
+                                        >
+                                            clear
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {isDesktopTools ? (
+                                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Blocked Creators</p>
+                                    <div className="flex items-center justify-between gap-3 text-xs text-slate-200">
+                                        <span>{blockedAuthors.length} blocked</span>
+                                        <button
+                                            type="button"
+                                            onClick={clearBlockedAuthors}
+                                            className="rounded border border-white/20 px-2 py-1 uppercase tracking-[0.12em] text-slate-200 hover:border-white/40"
+                                        >
+                                            clear
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : null}
                         </div>
                     </div>
                 </section>
+
+                {isDesktopTools ? (
+                    <div className="fixed left-[min(calc((100vw+80rem)/2+1rem),calc(100vw-5.5rem))] top-1/2 z-50 flex -translate-y-1/2 flex-col gap-3">
+                        <div className="group relative">
+                            <button
+                                type="button"
+                                onClick={() => setInteractionMode((prev) => (prev === "block-author" ? "none" : "block-author"))}
+                                className={[
+                                    "rounded-xl border p-2 shadow-[0_12px_24px_-14px_rgba(0,0,0,0.85)] backdrop-blur-sm transition",
+                                    interactionMode === "block-author"
+                                        ? "border-rose-300/80 bg-rose-300/20"
+                                        : "border-white/20 bg-slate-950/70 hover:border-rose-200/50",
+                                ].join(" ")}
+                                aria-label="no longer show this creator"
+                            >
+                                <img src="/scissors_closed.webp" alt="Block creator mode" className="h-10 w-10 object-contain" />
+                            </button>
+                            <span className="pointer-events-none absolute left-full top-1/2 ml-3 w-max -translate-y-1/2 rounded-md border border-white/15 bg-slate-900/95 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-100 opacity-0 transition group-hover:opacity-100">
+                                no longer show this creator
+                            </span>
+                        </div>
+
+                        <div className="group relative">
+                            <button
+                                type="button"
+                                onClick={() => setInteractionMode((prev) => (prev === "hide-item" ? "none" : "hide-item"))}
+                                className={[
+                                    "rounded-xl border p-2 shadow-[0_12px_24px_-14px_rgba(0,0,0,0.85)] backdrop-blur-sm transition",
+                                    interactionMode === "hide-item"
+                                        ? "border-red-300/80 bg-red-300/20"
+                                        : "border-white/20 bg-slate-950/70 hover:border-red-200/50",
+                                ].join(" ")}
+                                aria-label="mark an item as seen, so it won't be shown again"
+                            >
+                                <img src="/stamp.webp" alt="Mark seen mode" className="h-10 w-10 object-contain" />
+                            </button>
+                            <span className="pointer-events-none absolute left-full top-1/2 ml-3 w-max -translate-y-1/2 rounded-md border border-white/15 bg-slate-900/95 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-100 opacity-0 transition group-hover:opacity-100">
+                                mark an item as seen, so it won't be shown again
+                            </span>
+                        </div>
+                    </div>
+                ) : null}
 
                 {loading ? <p className="mt-6 text-sm text-slate-300">Loading feed entries...</p> : null}
                 {error ? <p className="mt-6 rounded-xl border border-red-300/30 bg-red-300/10 p-3 text-sm text-red-100">{error}</p> : null}
@@ -454,7 +643,14 @@ export default function App() {
 
                                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                                         {group.items.map((item) => (
-                                            <ItemCard key={item.url} item={item} />
+                                            <ItemCard
+                                                key={item.url}
+                                                item={item}
+                                                interactionMode={isDesktopTools ? interactionMode : "none"}
+                                                onToolAction={handleItemToolAction}
+                                                actionState={itemActionState[item.url] || "idle"}
+                                                shake={isDesktopTools && interactionMode === "block-author"}
+                                            />
                                         ))}
                                     </div>
                                 </section>
@@ -463,7 +659,16 @@ export default function App() {
                     ) : (
                         <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                             {visibleItems.length ? (
-                                visibleItems.map((item) => <ItemCard key={item.url} item={item} />)
+                                visibleItems.map((item) => (
+                                    <ItemCard
+                                        key={item.url}
+                                        item={item}
+                                        interactionMode={isDesktopTools ? interactionMode : "none"}
+                                        onToolAction={handleItemToolAction}
+                                        actionState={itemActionState[item.url] || "idle"}
+                                        shake={isDesktopTools && interactionMode === "block-author"}
+                                    />
+                                ))
                             ) : (
                                 <p className="col-span-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
                                     No entries matched your filters.

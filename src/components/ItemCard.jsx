@@ -27,15 +27,46 @@ function openInNewTab(url) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
-export default function ItemCard({ item }) {
+function isFreePrice(price) {
+  const raw = String(price || "").trim().toLowerCase();
+  if (!raw) return false;
+
+  if (raw === "free") return true;
+
+  // Normalize common currency formatting and detect true zero values.
+  const numeric = Number(raw.replace(/[^0-9.\-]/g, ""));
+  return Number.isFinite(numeric) && numeric === 0;
+}
+
+export default function ItemCard({
+  item,
+  interactionMode = "none",
+  onToolAction,
+  actionState = "idle",
+  shake = false,
+}) {
   const sourceChips = item.source.slice(0, 4);
+  const toolModeEnabled = interactionMode !== "none";
+  const isFree = isFreePrice(item.price);
 
   return (
     <article
-      role="link"
+      role={toolModeEnabled ? "button" : "link"}
       tabIndex={0}
-      onClick={() => openInNewTab(item.url)}
+      onClick={() => {
+        if (toolModeEnabled) {
+          onToolAction?.(item);
+          return;
+        }
+
+        openInNewTab(item.url);
+      }}
       onAuxClick={(event) => {
+        if (toolModeEnabled) {
+          event.preventDefault();
+          return;
+        }
+
         if (event.button === 1) {
           event.preventDefault();
           openInNewTab(item.url);
@@ -44,12 +75,44 @@ export default function ItemCard({ item }) {
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
+          if (toolModeEnabled) {
+            onToolAction?.(item);
+            return;
+          }
+
           openInNewTab(item.url);
         }
       }}
-      className="group relative cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-slate-950/55 p-4 shadow-[0_20px_40px_-28px_rgba(0,0,0,0.9)] backdrop-blur-sm"
+      className={[
+        "group feed-item relative cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-slate-950/55 p-4 shadow-[0_20px_40px_-28px_rgba(0,0,0,0.9)] backdrop-blur-sm",
+        actionState === "stamp" ? "item-stamp-out" : "",
+        actionState === "cut" ? "item-cut-out" : "",
+        shake ? "item-shake" : "",
+      ].join(" ")}
     >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/70 to-transparent opacity-0 transition group-hover:opacity-100" />
+
+      {interactionMode === "hide-item" && actionState !== "stamp" ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center opacity-0 transition duration-150 group-hover:opacity-100">
+          <span className="rounded-xl border border-red-100/70 bg-red-700/50 px-8 py-4 text-3xl font-black uppercase tracking-[0.24em] text-red-100 shadow-[0_14px_34px_rgba(0,0,0,0.6)]">
+            mark seen
+          </span>
+        </div>
+      ) : null}
+
+      {actionState === "stamp" ? (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+          <span className="stamp-seen rounded-xl border border-red-100/80 bg-red-700/55 px-8 py-4 text-3xl font-black uppercase tracking-[0.24em] text-red-100 shadow-[0_14px_34px_rgba(0,0,0,0.6)]">
+            seen
+          </span>
+        </div>
+      ) : null}
+
+      {actionState === "cut" ? (
+        <div className="pointer-events-none absolute inset-0 z-20">
+          <span className="cut-line absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-rose-200/90" />
+        </div>
+      ) : null}
 
       {item.image_url ? (
         <div className="mb-3 aspect-[315/250] overflow-hidden rounded-xl border border-white/10 bg-black/30">
@@ -64,8 +127,15 @@ export default function ItemCard({ item }) {
 
       <div className="mb-3 flex items-start justify-between gap-3">
         <h2 className="line-clamp-2 text-lg font-semibold leading-tight text-slate-50">{item.title}</h2>
-        <span className="rounded-full border border-emerald-300/40 bg-emerald-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-100">
-          {item.price || "free"}
+        <span
+          className={[
+            "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
+            isFree
+              ? "border border-orange-200/60 bg-orange-300/20 text-orange-100"
+              : "border border-emerald-300/40 bg-emerald-300/10 text-emerald-100",
+          ].join(" ")}
+        >
+          {isFree ? "FREE" : item.price || "-"}
         </span>
       </div>
 

@@ -9,11 +9,40 @@ function formatDate(value) {
   }).format(d);
 }
 
+function formatSourceTerm(term) {
+  const value = (term || "").trim();
+  if (!value) return "unknown";
+
+  return value.startsWith("ttrpg+") ? value.slice("ttrpg+".length) : value;
+}
+
+function openInNewTab(url) {
+  if (!url) return;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 export default function ItemCard({ item }) {
   const sourceChips = item.source.slice(0, 4);
 
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/55 p-4 shadow-[0_20px_40px_-28px_rgba(0,0,0,0.9)] backdrop-blur-sm">
+    <article
+      role="link"
+      tabIndex={0}
+      onClick={() => openInNewTab(item.url)}
+      onAuxClick={(event) => {
+        if (event.button === 1) {
+          event.preventDefault();
+          openInNewTab(item.url);
+        }
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openInNewTab(item.url);
+        }
+      }}
+      className="group relative cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-slate-950/55 p-4 shadow-[0_20px_40px_-28px_rgba(0,0,0,0.9)] backdrop-blur-sm"
+    >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/70 to-transparent opacity-0 transition group-hover:opacity-100" />
 
       {item.image_url ? (
@@ -42,35 +71,27 @@ export default function ItemCard({ item }) {
             key={`${s.category_slug}-${s.term}`}
             className="rounded-full border border-white/20 bg-white/5 px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-200"
           >
-            {s.category_slug}:{s.term}
+            {formatSourceTerm(s.term)}
           </span>
         ))}
       </div>
 
       <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
         <span>{formatDate(item.publish_date)}</span>
-        <span>{item.author || "unknown author"}</span>
-      </div>
-
-      <div className="mt-4 flex gap-2">
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex flex-1 items-center justify-center rounded-lg border border-amber-300/60 bg-amber-300/90 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-950 transition hover:bg-amber-200"
-        >
-          Open on Itch
-        </a>
         {item.author_url ? (
           <a
             href={item.author_url}
             target="_blank"
             rel="noreferrer"
+            onClick={(event) => event.stopPropagation()}
+            onAuxClick={(event) => event.stopPropagation()}
             className="inline-flex items-center justify-center rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 transition hover:border-white/40"
           >
-            Author
+            {item.author || "unknown author"}
           </a>
-        ) : null}
+        ) : (
+          <span>{item.author || "unknown author"}</span>
+        )}
       </div>
     </article>
   );

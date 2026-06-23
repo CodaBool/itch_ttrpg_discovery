@@ -240,8 +240,9 @@ function buildSearches(options = {}) {
   const selectedTagSet = new Set(selectedTags.map((tag) => tag.toLowerCase()));
   const searches = [];
 
-  for (const category of selectedCategories) {
-    for (const definition of SEARCH_DEFINITIONS) {
+  // Interleave categories per definition so the step cursor cycles categories quickly.
+  for (const definition of SEARCH_DEFINITIONS) {
+    for (const category of selectedCategories) {
       const shouldInclude =
         selectedTagSet.size === 0 ||
         definition.tags.some((tag) => selectedTagSet.has(tag.toLowerCase()));
@@ -263,6 +264,13 @@ function buildSearches(options = {}) {
   }
 
   return searches.slice(0, maxSearches);
+}
+
+function hasScopedStepOptions(options = {}) {
+  const hasCategory = Boolean(String(options.category ?? "").trim());
+  const hasTag = Boolean(String(options.tag ?? "").trim());
+  const hasMaxSearches = options.maxSearches != null && String(options.maxSearches).trim() !== "";
+  return hasCategory || hasTag || hasMaxSearches;
 }
 
 function itemPreview(item) {
@@ -423,14 +431,21 @@ async function runSingleSearch(env, search, options = {}) {
 }
 
 async function runIngestionStep(env, options = {}) {
-  const categories = CATEGORIES;
-  const tags = [];
-  const searches = buildSearches({ categories, tags });
+  const scopedRun = hasScopedStepOptions(options);
+  const categories = scopedRun ? normalizeCategoryInput(options.category) : CATEGORIES;
+  const tags = scopedRun ? normalizeTagInput(options.tag) : [];
+  const maxSearches = scopedRun
+    ? toBoundedInt(options.maxSearches, 1, 2000, 1)
+    : Number.POSITIVE_INFINITY;
+  const searches = buildSearches({ categories, tags, maxSearches });
 
   if (!searches.length) {
     return {
       started_at: new Date().toISOString(),
       dry_run: toBoolean(options.dryRun, false),
+      scoped_run: scopedRun,
+      selected_categories: categories.map((c) => c.slug),
+      selected_terms: tags,
       total_searches: 0,
       processed_index: null,
       next_index: null,
@@ -439,16 +454,28 @@ async function runIngestionStep(env, options = {}) {
     };
   }
 
-  const cursor = await readIngestionCursor(env);
-  const processedIndex = cursor % searches.length;
-  const nextIndex = (processedIndex + 1) % searches.length;
+  let processedIndex = 0;
+  let nextIndex = null;
+
+  if (!scopedRun) {
+    const cursor = await readIngestionCursor(env);
+    processedIndex = cursor % searches.length;
+    nextIndex = (processedIndex + 1) % searches.length;
+  }
+
   const search = searches[processedIndex];
 
   const result = await runSingleSearch(env, search, options);
-  await writeIngestionCursor(env, nextIndex);
+
+  if (!scopedRun && nextIndex != null) {
+    await writeIngestionCursor(env, nextIndex);
+  }
 
   return {
     ...result,
+    scoped_run: scopedRun,
+    selected_categories: categories.map((c) => c.slug),
+    selected_terms: tags,
     total_searches: searches.length,
     processed_index: processedIndex,
     next_index: nextIndex,

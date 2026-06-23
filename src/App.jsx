@@ -74,7 +74,7 @@ const STORAGE_KEYS = {
     tags: "itch-feed:selected-tags",
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://itch-ttrpg-discovery.codabool.workers.dev";
 
 const SYSTEM_MATCH_TAGS = {
     mothership: ["mothership", "mothership-rpg", "panic-engine"],

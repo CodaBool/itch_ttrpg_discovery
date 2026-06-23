@@ -314,25 +314,49 @@ export default function App() {
 
     useEffect(() => {
         const controller = new AbortController();
+        const PAGE_SIZE = 5000;
+        const MAX_PAGES = 200;
 
         async function load() {
             setLoading(true);
             setError("");
 
             try {
-                const params = new URLSearchParams({ limit: "250" });
-                if (search.trim()) params.set("q", search.trim());
+                const q = search.trim();
+                const collected = [];
 
-                const response = await fetch(`${API_BASE}/api/items?${params.toString()}`, {
-                    signal: controller.signal,
-                });
+                let offset = 0;
+                let hasMore = true;
+                let page = 0;
 
-                if (!response.ok) {
-                    throw new Error(`API request failed with status ${response.status}`);
+                while (hasMore && page < MAX_PAGES) {
+                    const params = new URLSearchParams({
+                        limit: String(PAGE_SIZE),
+                        offset: String(offset),
+                    });
+                    if (q) params.set("q", q);
+
+                    const response = await fetch(`${API_BASE}/api/items?${params.toString()}`, {
+                        signal: controller.signal,
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`API request failed with status ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    const pageItems = Array.isArray(payload.items) ? payload.items : [];
+                    collected.push(...pageItems);
+
+                    const pagination = payload.pagination || {};
+                    hasMore = Boolean(pagination.has_more);
+                    offset = Number.isFinite(Number(pagination.next_offset))
+                        ? Number(pagination.next_offset)
+                        : offset + PAGE_SIZE;
+                    page += 1;
                 }
 
-                const payload = await response.json();
-                setItems(Array.isArray(payload.items) ? payload.items : []);
+                setItems(collected);
             } catch (err) {
                 if (err.name !== "AbortError") {
                     setError(err.message || "Unable to load feed.");

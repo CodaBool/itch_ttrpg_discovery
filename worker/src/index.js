@@ -603,7 +603,8 @@ async function listItems(request, env) {
   const q = (url.searchParams.get("q") || "").trim().toLowerCase();
   const category = (url.searchParams.get("category") || "").trim().toLowerCase();
   const tag = (url.searchParams.get("tag") || "").trim().toLowerCase();
-  const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") || "100")));
+  const limit = Math.min(5000, Math.max(1, Number(url.searchParams.get("limit") || "5000")));
+  const offset = Math.max(0, Number(url.searchParams.get("offset") || "0"));
 
   const results = await env.DB.prepare(
     `SELECT
@@ -611,9 +612,9 @@ async function listItems(request, env) {
       author, author_url, first_seen_at, updated_at
      FROM items
      ORDER BY updated_at DESC
-     LIMIT ?`
+     LIMIT ? OFFSET ?`
   )
-    .bind(limit)
+    .bind(limit, offset)
     .all();
 
   const rows = (results.results || []).map((row) => {
@@ -652,11 +653,18 @@ async function listItems(request, env) {
   return json({
     count: filtered.length,
     items: filtered,
+    pagination: {
+      limit,
+      offset,
+      has_more: (results.results || []).length === limit,
+      next_offset: offset + limit,
+    },
     filters: {
       category,
       tag,
       q,
       limit,
+      offset,
     },
   });
 }

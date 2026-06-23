@@ -16,6 +16,17 @@ export default function ItemCard({ item }) {
     <article className="group relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/55 p-4 shadow-[0_20px_40px_-28px_rgba(0,0,0,0.9)] backdrop-blur-sm">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/70 to-transparent opacity-0 transition group-hover:opacity-100" />
 
+      {item.image_url ? (
+        <div className="mb-3 overflow-hidden rounded-xl border border-white/10 bg-black/20">
+          <img
+            src={item.image_url}
+            alt={item.title}
+            loading="lazy"
+            className="h-44 w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+          />
+        </div>
+      ) : null}
+
       <div className="mb-3 flex items-start justify-between gap-3">
         <h2 className="line-clamp-2 text-lg font-semibold leading-tight text-slate-50">{item.title}</h2>
         <span className="rounded-full border border-emerald-300/40 bg-emerald-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-100">

@@ -18,7 +18,7 @@ const SYSTEM_FILTERS = [
 const TOOL_LIKE_TAGS = ["tool", "generator", "generated", "generation"];
 const HORROR_LIKE_TAGS = ["horror", "body-horror", "liminal-horror"];
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8787";
 
 function readSourceTags(source) {
     if (!source || typeof source !== "object") return [];
@@ -134,34 +134,8 @@ export default function App() {
     return (
         <main className="min-h-screen bg-[radial-gradient(circle_at_15%_0%,rgba(249,115,22,.2),transparent_45%),radial-gradient(circle_at_90%_20%,rgba(14,165,233,.18),transparent_40%),linear-gradient(180deg,#020617_0%,#0f172a_100%)] px-4 pb-14 pt-8 text-slate-100 md:px-8">
             <section className="mx-auto w-full max-w-7xl">
-                <header className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-950/45 p-6 backdrop-blur-sm md:p-10">
-                    <div className="absolute -left-16 top-16 h-40 w-40 rounded-full bg-orange-400/20 blur-3xl" />
-                    <div className="absolute -right-12 top-6 h-36 w-36 rounded-full bg-cyan-400/20 blur-3xl" />
-                    <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200">Itch TTRPG Discovery</p>
-                      <h1 className="mt-3 max-w-3xl font-[Space_Grotesk] text-3xl font-bold tracking-tight text-white md:text-5xl">
-                        Fresh indie RPGs, tools, zines, and weird tabletop experiments
-                    </h1>
-                    <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-300 md:text-base">
-                        This fan feed pulls trusted tag combinations from itch XML sources every ~2 minutes and merges all source hits per item URL.
-                    </p>
 
-                    <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Loaded entries</p>
-                            <p className="mt-1 text-2xl font-semibold text-amber-100">{stats.total}</p>
-                        </div>
-                        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">With images</p>
-                            <p className="mt-1 text-2xl font-semibold text-cyan-100">{stats.withImages}</p>
-                        </div>
-                        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Unique creators</p>
-                            <p className="mt-1 text-2xl font-semibold text-emerald-100">{stats.uniqueAuthors}</p>
-                        </div>
-                    </div>
-                </header>
-
-                <section className="mt-6 rounded-2xl border border-white/10 bg-slate-950/45 p-4 backdrop-blur-sm md:p-5">
+                <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-2 backdrop-blur-sm md:p-5">
                     <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Search</label>
                     <input
                         value={search}

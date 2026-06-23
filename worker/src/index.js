@@ -98,23 +98,29 @@ function textValue(value) {
   return "";
 }
 
+function stripHtmlAndNormalizeWhitespace(input) {
+  if (!input) return "";
+
+  return input
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function parseAuthorFromGuid(guid) {
   const guidStr = textValue(guid);
-  if (!guidStr.includes("https://") || !guidStr.includes("itch.io/")) return "";
+  if (!guidStr.includes("https://") || !guidStr.includes(".itch.io/")) return "";
 
   try {
-    return guidStr.split("https://")[1].split("itch.io/")[0].replace(/\/$/, "");
+    return guidStr.split("https://")[1].split(".itch.io/")[0].replace(/\/$/, "");
   } catch {
     return "";
   }
 }
 
-function parseAuthorUrlFromFetchedUrl(fetchedUrl) {
-  try {
-    return `https://${new URL(fetchedUrl).host}`;
-  } catch {
-    return "";
-  }
+function parseAuthorUrlFromFetchedUrl(guid) {
+  const guidStr = parseAuthorFromGuid(guid)
+  return guidStr ? `https://${guidStr}.itch.io` : "";
 }
 
 function normalizeSource(source) {
@@ -160,13 +166,13 @@ function normalizeItem(item, fetchedUrl) {
   return {
     url: link,
     title,
-    description: textValue(item.description),
+    description: stripHtmlAndNormalizeWhitespace(textValue(item.description)),
     image_url: textValue(item.imageurl),
     price: textValue(item.price),
     publish_date: textValue(item.pubDate),
     update_date: textValue(item.updateDate),
     author: parseAuthorFromGuid(item.guid),
-    author_url: parseAuthorUrlFromFetchedUrl(fetchedUrl),
+    author_url: parseAuthorUrlFromFetchedUrl(item.guid),
   };
 }
 

@@ -114,16 +114,16 @@ export default function ItemCard({
         </div>
       ) : null}
 
-      {item.image_url ? (
-        <div className="mb-3 aspect-[315/250] overflow-hidden rounded-xl border border-white/10 bg-black/30">
+      <div className="mb-3 aspect-[315/250] overflow-hidden rounded-xl border border-white/10 bg-black">
+        {item.image_url ? (
           <img
             src={item.image_url}
             alt={item.title}
             loading="lazy"
             className="h-full w-full object-contain"
           />
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       <div className="mb-3 flex items-start justify-between gap-3">
         <h2 className="line-clamp-2 text-lg font-semibold leading-tight text-slate-50">{item.title}</h2>

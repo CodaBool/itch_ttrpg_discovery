@@ -35,31 +35,21 @@ const SOLO_TAGS = [
     "fist",
 ];
 
-const SYSTEM_TAGS = [
-    "liminal-horror",
-    "mothership",
-    "mork-borg",
-    "delta-green",
-    "call-of-cthulhu",
-    "triangle-agency",
-    "mausritter",
-    "cairn",
-    "into-the-odd",
-    "fist",
+const SYSTEM_DEFINITIONS = [
+    { key: "liminal-horror", label: "Liminal Horror", tags: ["liminal-horror"] },
+    { key: "mothership", label: "Mothership", tags: ["mothership", "mothership-rpg", "panic-engine"] },
+    { key: "mork-borg", label: "Mork Borg", tags: ["mork-borg"] },
+    { key: "delta-green", label: "Delta Green", tags: ["delta-green"] },
+    { key: "call-of-cthulhu", label: "Call of Cthulhu", tags: ["call-of-cthulhu"] },
+    { key: "triangle-agency", label: "Triangle Agency", tags: ["triangle-agency"] },
+    { key: "mausritter", label: "Mausritter", tags: ["mausritter"] },
+    { key: "cairn", label: "Cairn", tags: ["cairn"] },
+    { key: "into-the-odd", label: "Into the Odd", tags: ["into-the-odd"] },
+    { key: "fist", label: "FIST", tags: ["fist"] },
 ];
 
-const SYSTEM_FILTERS = [
-    { key: "liminal-horror", label: "Liminal Horror" },
-    { key: "mothership", label: "Mothership" },
-    { key: "mork-borg", label: "Mork Borg" },
-    { key: "delta-green", label: "Delta Green" },
-    { key: "call-of-cthulhu", label: "Call of Cthulhu" },
-    { key: "triangle-agency", label: "Triangle Agency" },
-    { key: "mausritter", label: "Mausritter" },
-    { key: "cairn", label: "Cairn" },
-    { key: "into-the-odd", label: "Into the Odd" },
-    { key: "fist", label: "FIST" },
-];
+const SYSTEM_TAGS = SYSTEM_DEFINITIONS.map((system) => system.key);
+const SYSTEM_FILTERS = SYSTEM_DEFINITIONS.map(({ key, label }) => ({ key, label }));
 
 const HIDDEN_ALIAS_TAGS = ["mothership-rpg", "panic-engine"];
 
@@ -76,9 +66,9 @@ const STORAGE_KEYS = {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://itch-ttrpg-discovery.codabool.workers.dev";
 
-const SYSTEM_MATCH_TAGS = {
-    mothership: ["mothership", "mothership-rpg", "panic-engine"],
-};
+const SYSTEM_TAGS_BY_KEY = Object.fromEntries(
+    SYSTEM_DEFINITIONS.map((system) => [system.key, system.tags])
+);
 
 function loadStoredArray(key, fallback, allowedValues) {
     if (typeof window === "undefined") return fallback;
@@ -133,6 +123,14 @@ function loadStoredSystemValue() {
 
 function toggleValue(list, value) {
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}
+
+function toggleSystemSelection(current, next) {
+    return current === next ? "" : next;
+}
+
+function getSystemMatchTags(systemKey) {
+    return SYSTEM_TAGS_BY_KEY[systemKey] || [systemKey];
 }
 
 function readSourceTags(source) {
@@ -273,7 +271,7 @@ export default function App() {
             const tags = itemTagSet(item);
 
             if (selectedSystem) {
-                const matchTags = SYSTEM_MATCH_TAGS[selectedSystem] || [selectedSystem];
+                const matchTags = getSystemMatchTags(selectedSystem);
                 return matchTags.some((tag) => tags.has(tag));
             }
 
@@ -355,9 +353,7 @@ export default function App() {
                                     key={system.key}
                                     label={system.label}
                                     active={selectedSystem === system.key}
-                                    onClick={() =>
-                                        setSelectedSystem((prev) => (prev === system.key ? "" : system.key))
-                                    }
+                                    onClick={() => setSelectedSystem((prev) => toggleSystemSelection(prev, system.key))}
                                 />
                             ))}
                         </div>

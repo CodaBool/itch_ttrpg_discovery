@@ -6,6 +6,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "local": "node --env-file=../.env scripts/local.mjs",
+    "detail": "node --env-file=../.env scripts/detail.mjs",
     "wipe": "node --env-file=../.env scripts/wipe.mjs",
     "worker:dev": "wrangler dev",
     "worker:deploy": "wrangler deploy",

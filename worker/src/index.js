@@ -621,7 +621,7 @@ async function listItems(request, env) {
   const results = await env.DB.prepare(
     `SELECT
       url, source, title, description, image_url, price, publish_date, update_date,
-      author, author_url, first_seen_at, updated_at
+      author, author_url, rating, engagement, ai, first_seen_at, updated_at
      FROM items
      ORDER BY updated_at DESC
      LIMIT ? OFFSET ?`

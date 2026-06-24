@@ -82,6 +82,7 @@ const STORAGE_KEYS = {
     category: "itch-feed:selected-category",
     system: "itch-feed:selected-system",
     tags: "itch-feed:selected-tags",
+    readingMode: "itch-feed:reading-mode",
     hiddenUrls: "itch-feed:hidden-urls",
     blockedAuthors: "itch-feed:blocked-authors",
 };
@@ -164,6 +165,19 @@ function loadStoredStringArray(key) {
             .filter(Boolean);
     } catch {
         return [];
+    }
+}
+
+function loadStoredBool(key, fallback = false) {
+    if (typeof window === "undefined") return fallback;
+
+    try {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return fallback;
+        const parsed = JSON.parse(raw);
+        return typeof parsed === "boolean" ? parsed : fallback;
+    } catch {
+        return fallback;
     }
 }
 
@@ -263,6 +277,7 @@ export default function App() {
     const [itemActionState, setItemActionState] = useState({});
     const [isDesktopTools, setIsDesktopTools] = useState(false);
     const [showBeyondYear, setShowBeyondYear] = useState(false);
+    const [readingMode, setReadingMode] = useState(() => loadStoredBool(STORAGE_KEYS.readingMode, false));
 
     const availableSystems = useMemo(() => {
         const available = new Set();
@@ -327,12 +342,20 @@ export default function App() {
 
     useEffect(() => {
         if (typeof window === "undefined") return;
+        window.localStorage.setItem(STORAGE_KEYS.readingMode, JSON.stringify(readingMode));
+    }, [readingMode]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
 
         const media = window.matchMedia("(min-width: 768px) and (pointer: fine)");
         const apply = () => {
             const enabled = media.matches;
             setIsDesktopTools(enabled);
-            if (!enabled) setInteractionMode("none");
+            if (!enabled) {
+                setInteractionMode("none");
+                setReadingMode(false);
+            }
         };
 
         apply();
@@ -607,6 +630,18 @@ export default function App() {
                             </div>
 
                             {isDesktopTools ? (
+                                <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
+                                    <input
+                                        type="checkbox"
+                                        checked={readingMode}
+                                        onChange={(event) => setReadingMode(event.target.checked)}
+                                        className="h-4 w-4 accent-amber-300"
+                                    />
+                                    <span className="font-semibold uppercase tracking-[0.12em]">Reading Mode</span>
+                                </label>
+                            ) : null}
+
+                            {isDesktopTools ? (
                                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                                     <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Seen Items</p>
                                     <div className="flex items-center justify-between gap-3 text-xs text-slate-200">
@@ -668,16 +703,18 @@ export default function App() {
                                 type="button"
                                 onClick={() => setInteractionMode((prev) => (prev === "block-author" ? "none" : "block-author"))}
                                 className={[
-                                    "rounded-xl border p-2 shadow-[0_12px_24px_-14px_rgba(0,0,0,0.85)] backdrop-blur-sm transition",
+                                    "flex h-14 w-14 items-center justify-center rounded-xl border p-2 shadow-[0_12px_24px_-14px_rgba(0,0,0,0.85)] backdrop-blur-sm transition",
                                     interactionMode === "block-author"
                                         ? "border-rose-300/80 bg-rose-300/20"
                                         : "border-white/20 bg-slate-950/70 hover:border-rose-200/50",
                                 ].join(" ")}
                                 aria-label="no longer show this creator"
                             >
-                                <img src="/scissors_closed.webp" alt="Block creator mode" className="h-10 w-10 object-contain" />
+                                {interactionMode === "block-author" ? null : (
+                                    <img src="/scissors_closed.webp" alt="Block creator mode" className="h-10 w-10 object-contain" />
+                                )}
                             </button>
-                            <span className="pointer-events-none absolute left-full top-1/2 ml-3 w-max -translate-y-1/2 rounded-md border border-white/15 bg-slate-900/95 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-100 opacity-0 transition group-hover:opacity-100">
+                            <span className="pointer-events-none absolute right-full top-1/2 mr-3 w-64 -translate-y-1/2 rounded-xl border border-white/30 bg-slate-900 px-4 py-3 text-sm font-semibold uppercase leading-snug tracking-[0.12em] text-slate-100 shadow-[0_12px_28px_-12px_rgba(0,0,0,0.85)] opacity-0 transition group-hover:opacity-100">
                                 no longer show this creator
                             </span>
                         </div>
@@ -687,16 +724,18 @@ export default function App() {
                                 type="button"
                                 onClick={() => setInteractionMode((prev) => (prev === "hide-item" ? "none" : "hide-item"))}
                                 className={[
-                                    "rounded-xl border p-2 shadow-[0_12px_24px_-14px_rgba(0,0,0,0.85)] backdrop-blur-sm transition",
+                                    "flex h-14 w-14 items-center justify-center rounded-xl border p-2 shadow-[0_12px_24px_-14px_rgba(0,0,0,0.85)] backdrop-blur-sm transition",
                                     interactionMode === "hide-item"
                                         ? "border-red-300/80 bg-red-300/20"
                                         : "border-white/20 bg-slate-950/70 hover:border-red-200/50",
                                 ].join(" ")}
                                 aria-label="mark an item as seen, so it won't be shown again"
                             >
-                                <img src="/stamp.webp" alt="Mark seen mode" className="h-10 w-10 object-contain" />
+                                {interactionMode === "hide-item" ? null : (
+                                    <img src="/stamp.webp" alt="Mark seen mode" className="h-10 w-10 object-contain" />
+                                )}
                             </button>
-                            <span className="pointer-events-none absolute left-full top-1/2 ml-3 w-max -translate-y-1/2 rounded-md border border-white/15 bg-slate-900/95 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-100 opacity-0 transition group-hover:opacity-100">
+                            <span className="pointer-events-none absolute right-full top-1/2 mr-3 w-64 -translate-y-1/2 rounded-xl border border-white/30 bg-slate-900 px-4 py-3 text-sm font-semibold uppercase leading-snug tracking-[0.12em] text-slate-100 shadow-[0_12px_28px_-12px_rgba(0,0,0,0.85)] opacity-0 transition group-hover:opacity-100">
                                 mark an item as seen, so it won't be shown again
                             </span>
                         </div>
@@ -742,6 +781,7 @@ export default function App() {
                                                         <ItemCard
                                                             key={item.url}
                                                             item={item}
+                                                            readingMode={readingMode}
                                                             interactionMode={isDesktopTools ? interactionMode : "none"}
                                                             onToolAction={handleItemToolAction}
                                                             actionState={itemActionState[item.url] || "idle"}
@@ -757,6 +797,7 @@ export default function App() {
                                                 <ItemCard
                                                     key={item.url}
                                                     item={item}
+                                                    readingMode={readingMode}
                                                     interactionMode={isDesktopTools ? interactionMode : "none"}
                                                     onToolAction={handleItemToolAction}
                                                     actionState={itemActionState[item.url] || "idle"}
@@ -793,6 +834,7 @@ export default function App() {
                                             <ItemCard
                                                 key={item.url}
                                                 item={item}
+                                                readingMode={readingMode}
                                                 interactionMode={isDesktopTools ? interactionMode : "none"}
                                                 onToolAction={handleItemToolAction}
                                                 actionState={itemActionState[item.url] || "idle"}
@@ -809,6 +851,7 @@ export default function App() {
                                         <ItemCard
                                             key={item.url}
                                             item={item}
+                                            readingMode={readingMode}
                                             interactionMode={isDesktopTools ? interactionMode : "none"}
                                             onToolAction={handleItemToolAction}
                                             actionState={itemActionState[item.url] || "idle"}

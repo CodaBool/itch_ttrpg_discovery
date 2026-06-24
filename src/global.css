@@ -124,3 +124,17 @@
 .cut-line {
 	animation: cutLine 0.35s ease-out forwards;
 }
+
+@keyframes metricBounce {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+	45% {
+		transform: translateY(-2px);
+	}
+}
+
+.metric-icon-bounce {
+	animation: metricBounce 1.35s ease-in-out infinite;
+}

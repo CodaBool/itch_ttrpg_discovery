@@ -93,8 +93,11 @@ export default function ItemCard({
   const ratingMetric = parseRatingMetric(item.rating);
   const engagementMetric = parseEngagementMetric(item.engagement);
   const showRatingStar = Boolean(ratingMetric && ratingMetric.average >= 4);
-  const showEngagementFire = item.engagement != null && engagementMetric !== null;
+  const showEngagementFire = item.engagement != null && engagementMetric !== null && engagementMetric > 0;
   const showNoAiBadge = String(item.ai || "").trim().toLowerCase() === "no ai";
+  const ratingCount = ratingMetric ? ratingMetric.count : null;
+  const shouldAnimateRating = Boolean(ratingCount != null && ratingCount > 5);
+  const shouldAnimateEngagement = Boolean(engagementMetric != null && engagementMetric > 6);
   const ratingTooltip = ratingMetric
     ? `${ratingMetric.average.toFixed(2)} average rating across ${ratingMetric.count} ratings`
     : "";
@@ -141,7 +144,7 @@ export default function ItemCard({
         }
       }}
       className={[
-        "group feed-item relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950/55 p-4 shadow-[0_20px_40px_-28px_rgba(0,0,0,0.9)] backdrop-blur-sm",
+        "group feed-item relative flex h-full cursor-pointer flex-col overflow-visible rounded-2xl border border-white/10 bg-slate-950/55 p-4 shadow-[0_20px_40px_-28px_rgba(0,0,0,0.9)] backdrop-blur-sm",
         actionState === "stamp" ? "item-stamp-out" : "",
         actionState === "cut" ? "item-cut-out" : "",
         shake ? "item-shake" : "",
@@ -198,51 +201,6 @@ export default function ItemCard({
 
       <p className="line-clamp-4 text-[1rem] leading-relaxed text-slate-300">{displayDescription || "No description available."}</p>
 
-      <div className="mt-4 flex items-center gap-2 text-xs text-slate-300">
-        {showRatingStar ? (
-          <span
-            title={ratingTooltip}
-            aria-label={ratingTooltip}
-            className="metric-icon-bounce inline-flex h-4 w-4 items-center justify-center text-red-400"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -0.5 33 33" className="h-4 w-4" aria-hidden="true">
-              <path
-                fill="currentColor"
-                fillRule="evenodd"
-                d="m27 32-10-6-11 6 3-12-9-8 12-1 4-11 5 11 12 1-8 8z"
-              />
-            </svg>
-          </span>
-        ) : null}
-        {showEngagementFire ? (
-          <span
-            title={engagementTooltip}
-            aria-label={engagementTooltip}
-            className="metric-icon-bounce inline-flex h-4 w-4 items-center justify-center"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              preserveAspectRatio="xMidYMid"
-              viewBox="-33 0 255 255"
-              className="h-4 w-4"
-              aria-hidden="true"
-            >
-              <defs>
-                <linearGradient id="engagement-fire-gradient" x1="94.1" x2="94.1" y1="255" y2=".2" gradientUnits="userSpaceOnUse">
-                  <stop offset="0" stopColor="#ff4c0d" />
-                  <stop offset="1" stopColor="#fc9502" />
-                </linearGradient>
-              </defs>
-              <g fillRule="evenodd">
-                <path d="M188 165a94 94 0 0 1-188-4c0-7 0-20 10-43q9-20 12-30c1-4 3-11 10 0 4 6 4 16 4 16s14-11 24-32c14-31 3-49-1-62-1-5-2-13 7-9 9 3 34 21 47 39 18 26 25 51 25 51s6-8 8-15c2-9 2-17 10-8 7 9 18 25 24 41 11 28 8 56 8 56" style={{ fill: "url(#engagement-fire-gradient)" }} />
-                <path d="M94 255c-36 0-65-29-65-65 0-22 9-35 27-53q19-18 27-35c1-2 3-12 11 0q8 11 15 26c7 16 9 31 9 31s7-4 12-15c2-4 5-17 14-4 6 10 15 27 15 50 0 36-29 65-65 65" style={{ fill: "#fc9502" }} />
-                <path d="M95 184c9 0 9 17 21 40 8 15-4 31-21 31s-26-14-26-31 17-40 26-40" style={{ fill: "#fce202" }} />
-              </g>
-            </svg>
-          </span>
-        ) : null}
-      </div>
-
       <div className={`mt-3 flex flex-wrap gap-2 ${hoverRevealClass}`}>
         {sourceChips.map((s) => (
           <span
@@ -259,8 +217,67 @@ export default function ItemCard({
         ) : null}
       </div>
 
-      <div className={`mt-auto flex items-center justify-between pt-2 text-xs text-slate-400 ${hoverRevealClass}`}>
-        <span>{formatDate(item.publish_date)}</span>
+      <div className="mt-auto flex items-center justify-between pt-2 text-xs text-slate-400">
+        <div className="flex items-center gap-4">
+          <span className={hoverRevealClass}>{formatDate(item.publish_date)}</span>
+          <div className="flex items-center gap-4">
+            {showRatingStar ? (
+              <span className="group/metric relative inline-flex h-4 w-4 items-center justify-center">
+                <span className="pointer-events-none absolute right-full top-1/2 mr-px -translate-x-0.5 -translate-y-1/2 text-[11px] font-semibold text-red-300 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100">
+                  {ratingCount}
+                </span>
+                <span className="inline-flex h-4 w-4 items-center justify-center text-red-400 opacity-40 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" aria-label={ratingTooltip}>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 -0.5 33 33"
+                    className={`h-4 w-4 ${shouldAnimateRating ? "metric-icon-dramatic" : ""}`}
+                    aria-hidden="true"
+                  >
+                    <path
+                      fill="currentColor"
+                      fillRule="evenodd"
+                      d="m27 32-10-6-11 6 3-12-9-8 12-1 4-11 5 11 12 1-8 8z"
+                    />
+                  </svg>
+                </span>
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-max -translate-x-1/2 rounded-xl border border-white/30 bg-slate-900 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-100 shadow-[0_12px_28px_-12px_rgba(0,0,0,0.85)] opacity-0 transition group-hover/metric:opacity-100">
+                  {ratingTooltip}
+                </span>
+              </span>
+            ) : null}
+            {showEngagementFire ? (
+              <span className="group/metric relative inline-flex h-4 w-4 items-center justify-center">
+                <span className="pointer-events-none absolute right-full top-1/2 mr-px -translate-x-0.5 -translate-y-1/2 text-[11px] font-semibold text-amber-300 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100">
+                  {engagementMetric}
+                </span>
+                <span className="inline-flex h-4 w-4 items-center justify-center opacity-40 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" aria-label={engagementTooltip}>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    preserveAspectRatio="xMidYMid"
+                    viewBox="-33 0 255 255"
+                    className={`h-4 w-4 ${shouldAnimateEngagement ? "metric-icon-dramatic" : ""}`}
+                    aria-hidden="true"
+                  >
+                    <defs>
+                      <linearGradient id="engagement-fire-gradient" x1="94.1" x2="94.1" y1="255" y2=".2" gradientUnits="userSpaceOnUse">
+                        <stop offset="0" stopColor="#ff4c0d" />
+                        <stop offset="1" stopColor="#fc9502" />
+                      </linearGradient>
+                    </defs>
+                    <g fillRule="evenodd">
+                      <path d="M188 165a94 94 0 0 1-188-4c0-7 0-20 10-43q9-20 12-30c1-4 3-11 10 0 4 6 4 16 4 16s14-11 24-32c14-31 3-49-1-62-1-5-2-13 7-9 9 3 34 21 47 39 18 26 25 51 25 51s6-8 8-15c2-9 2-17 10-8 7 9 18 25 24 41 11 28 8 56 8 56" style={{ fill: "url(#engagement-fire-gradient)" }} />
+                      <path d="M94 255c-36 0-65-29-65-65 0-22 9-35 27-53q19-18 27-35c1-2 3-12 11 0q8 11 15 26c7 16 9 31 9 31s7-4 12-15c2-4 5-17 14-4 6 10 15 27 15 50 0 36-29 65-65 65" style={{ fill: "#fc9502" }} />
+                      <path d="M95 184c9 0 9 17 21 40 8 15-4 31-21 31s-26-14-26-31 17-40 26-40" style={{ fill: "#fce202" }} />
+                    </g>
+                  </svg>
+                </span>
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-max -translate-x-1/2 rounded-xl border border-white/30 bg-slate-900 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-100 shadow-[0_12px_28px_-12px_rgba(0,0,0,0.85)] opacity-0 transition group-hover/metric:opacity-100">
+                  {engagementTooltip}
+                </span>
+              </span>
+            ) : null}
+          </div>
+        </div>
         {item.author_url ? (
           <a
             href={item.author_url}
@@ -268,12 +285,12 @@ export default function ItemCard({
             rel="noreferrer"
             onClick={(event) => event.stopPropagation()}
             onAuxClick={(event) => event.stopPropagation()}
-            className="inline-flex items-center justify-center rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 transition hover:border-white/40"
+            className={`inline-flex items-center justify-center rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 transition hover:border-white/40 ${hoverRevealClass}`}
           >
             {formatAuthorName(item.author)}
           </a>
         ) : (
-          <span>{formatAuthorName(item.author)}</span>
+          <span className={hoverRevealClass}>{formatAuthorName(item.author)}</span>
         )}
       </div>
     </article>

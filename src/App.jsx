@@ -277,7 +277,7 @@ export default function App() {
     const [itemActionState, setItemActionState] = useState({});
     const [isDesktopTools, setIsDesktopTools] = useState(false);
     const [showBeyondYear, setShowBeyondYear] = useState(false);
-    const [readingMode, setReadingMode] = useState(() => loadStoredBool(STORAGE_KEYS.readingMode, false));
+    const [readingMode, setReadingMode] = useState(() => loadStoredBool(STORAGE_KEYS.readingMode, true));
 
     const availableSystems = useMemo(() => {
         const available = new Set();

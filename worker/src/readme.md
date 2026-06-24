@@ -75,7 +75,9 @@ Returns static discovery metadata used by the worker.
   "categories": [
     { "name": "Assets", "slug": "game-assets" },
     { "name": "Physical Game", "slug": "physical-games" },
-    { "name": "Tool", "slug": "tools" }
+    { "name": "Tool", "slug": "tools" },
+    { "name": "Other", "slug": "misc" },
+    { "name": "Game mod", "slug": "game-mods" }
   ],
   "tags": ["horror", "body-horror", "..."]
 }

@@ -8,31 +8,51 @@ const CATEGORY_OPTIONS = [
     { slug: "physical-games", label: "Games" },
 ];
 
-// Keep in sync with worker/src/index.js PAIR_TAGS.
-const PAIR_TAGS = ["horror", "body-horror", "generation", "generated", "generator", "tool"];
+const CATEGORY_ALIAS_BY_SLUG = {
+    tools: ["tools", "misc", "game-mods"],
+};
 
-// Keep in sync with worker/src/index.js SOLO_TAGS.
+// Keep in sync with worker/src/index.js
+const PAIR_TAGS = [
+  "horror",
+  "body-horror",
+  "generation",
+  "generated",
+  "generator",
+  "tool",
+  "mystery",
+  "investigation",
+  "comedy",
+  "survival-horror",
+  "pbta",
+  "forged-in-the-dark",
+  "sci-fi",
+];
+
 const SOLO_TAGS = [
-    "zine",
-    "one-page",
-    "rules-lite",
-    "supplement",
-    "fanzine",
-    "micro-rpg",
-    "ttrpg",
-    "osr",
-    "liminal-horror",
-    "mothership",
-    "mothership-rpg",
-    "panic-engine",
-    "mork-borg",
-    "delta-green",
-    "call-of-cthulhu",
-    "triangle-agency",
-    "mausritter",
-    "cairn",
-    "into-the-odd",
-    "fist",
+  "zine",
+  "one-page",
+  "one-shot",
+  "rules-lite",
+  "rules-light",
+  "supplement",
+  "tabletop",
+  "fanzine",
+  "micro-rpg",
+  "ttrpg",
+  "osr",
+  "liminal-horror",
+  "mothership",
+  "mothership-rpg",
+  "panic-engine",
+  "mork-borg",
+  "delta-green",
+  "call-of-cthulhu",
+  "triangle-agency",
+  "mausritter",
+  "cairn",
+  "into-the-odd",
+  "fist",
 ];
 
 const SYSTEM_DEFINITIONS = [
@@ -89,17 +109,25 @@ function loadStoredArray(key, fallback, allowedValues) {
     }
 }
 
-function loadStoredValue(key, fallback, allowedValues) {
-    if (typeof window === "undefined") return fallback;
+function loadStoredCategoryValue() {
+    const allowed = CATEGORY_OPTIONS.map((option) => option.slug);
+    const normalizedAliases = {
+        misc: "tools",
+        "game-mods": "tools",
+    };
+
+    if (typeof window === "undefined") return "physical-games";
 
     try {
-        const raw = window.localStorage.getItem(key);
-        if (!raw) return fallback;
+        const raw = window.localStorage.getItem(STORAGE_KEYS.category);
+        if (!raw) return "physical-games";
         const parsed = JSON.parse(raw);
-        if (typeof parsed !== "string") return fallback;
-        return allowedValues.includes(parsed) ? parsed : fallback;
+        if (typeof parsed !== "string") return "physical-games";
+
+        const normalized = normalizedAliases[parsed] || parsed;
+        return allowed.includes(normalized) ? normalized : "physical-games";
     } catch {
-        return fallback;
+        return "physical-games";
     }
 }
 
@@ -169,7 +197,9 @@ function readSourceTags(source) {
 }
 
 function hasCategory(item, slug) {
-    return item.source.some((source) => source.category_slug === slug);
+    const expanded = CATEGORY_ALIAS_BY_SLUG[slug] || [slug];
+    const wanted = new Set(expanded);
+    return item.source.some((source) => wanted.has(source.category_slug));
 }
 
 function itemTagSet(item) {
@@ -193,23 +223,24 @@ function normalizeAuthorKey(author) {
 
 function getTimeBucket(item, now = new Date()) {
     const d = parseItemDate(item);
-    if (!d) return "beyond";
+    if (!d) return "over-365";
 
-    const sameYear = d.getUTCFullYear() === now.getUTCFullYear();
-    const sameMonth = sameYear && d.getUTCMonth() === now.getUTCMonth();
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const ageMs = now.getTime() - d.getTime();
+    const ageDays = ageMs / DAY_MS;
 
-    if (sameMonth) return "this-month";
-    if (sameYear) return "this-year";
-    return "beyond";
+    if (ageDays <= 30) return "last-30";
+    if (ageDays <= 365) return "last-365";
+    return "over-365";
 }
 
 const BUCKET_META = {
-    "this-month": { label: "This Month" },
-    "this-year": { label: "This Year" },
-    beyond: { label: "Over a year" },
+    "last-30": { label: "Last 30 Days" },
+    "last-365": { label: "Last 365 Days" },
+    "over-365": { label: "Over 365 Days" },
 };
 
-const BUCKET_ORDER = ["this-month", "this-year", "beyond"];
+const BUCKET_ORDER = ["last-30", "last-365", "over-365"];
 
 export default function App() {
     const [items, setItems] = useState([]);
@@ -217,11 +248,7 @@ export default function App() {
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [selectedCategory, setSelectedCategory] = useState(() =>
-        loadStoredValue(
-            STORAGE_KEYS.category,
-            "physical-games",
-            CATEGORY_OPTIONS.map((option) => option.slug)
-        )
+        loadStoredCategoryValue()
     );
     const [selectedSystem, setSelectedSystem] = useState(() =>
         loadStoredSystemValue()
@@ -235,6 +262,7 @@ export default function App() {
     const [interactionMode, setInteractionMode] = useState("none");
     const [itemActionState, setItemActionState] = useState({});
     const [isDesktopTools, setIsDesktopTools] = useState(false);
+    const [showBeyondYear, setShowBeyondYear] = useState(false);
 
     const availableSystems = useMemo(() => {
         const available = new Set();
@@ -464,9 +492,9 @@ export default function App() {
         });
 
         const groups = {
-            "this-month": [],
-            "this-year": [],
-            beyond: [],
+            "last-30": [],
+            "last-365": [],
+            "over-365": [],
         };
 
         sorted.forEach((item) => {
@@ -482,6 +510,11 @@ export default function App() {
     }, [visibleItems]);
 
     const showTimelineLayout = groupedBuckets.length > 1;
+    const singleBucket = groupedBuckets.length === 1 ? groupedBuckets[0] : null;
+
+    useEffect(() => {
+        setShowBeyondYear(false);
+    }, [selectedCategory, selectedSystem, selectedTags, search]);
 
     return (
         <main
@@ -665,8 +698,78 @@ export default function App() {
                                         <div className="mt-2 h-px w-full bg-gradient-to-r from-amber-300/70 via-cyan-300/20 to-transparent" />
                                     </div>
 
+                                    {group.key === "over-365" ? (
+                                        <div className="space-y-3">
+                                            {showBeyondYear ? null : (
+                                                <>
+                                                    <p className="rounded-xl border border-amber-200/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100/90">
+                                                        Data is gathered by itch's newest page. Results over a year old are limited.
+                                                    </p>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowBeyondYear(true)}
+                                                        className="rounded-xl border border-amber-200/50 bg-amber-300/15 px-4 py-2 text-sm font-semibold uppercase tracking-[0.14em] text-amber-100 transition hover:border-amber-200/80"
+                                                    >
+                                                        {`Show ${group.label} (${group.items.length})`}
+                                                    </button>
+                                                </>
+                                            )}
+
+                                            {showBeyondYear ? (
+                                                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                                    {group.items.map((item) => (
+                                                        <ItemCard
+                                                            key={item.url}
+                                                            item={item}
+                                                            interactionMode={isDesktopTools ? interactionMode : "none"}
+                                                            onToolAction={handleItemToolAction}
+                                                            actionState={itemActionState[item.url] || "idle"}
+                                                            shake={isDesktopTools && interactionMode === "block-author"}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    ) : (
+                                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                            {group.items.map((item) => (
+                                                <ItemCard
+                                                    key={item.url}
+                                                    item={item}
+                                                    interactionMode={isDesktopTools ? interactionMode : "none"}
+                                                    onToolAction={handleItemToolAction}
+                                                    actionState={itemActionState[item.url] || "idle"}
+                                                    shake={isDesktopTools && interactionMode === "block-author"}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+                                </section>
+                            ))}
+                        </section>
+                    ) : (
+                        singleBucket?.key === "over-365" ? (
+                            <section className="mt-6 space-y-3">
+                                {showBeyondYear ? null : (
+                                    <>
+                                        <p className="rounded-xl border border-amber-200/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100/90">
+                                            Data is gathered by itch's newest page. Results over a year old are limited.
+                                        </p>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowBeyondYear(true)}
+                                            className="rounded-xl border border-amber-200/50 bg-amber-300/15 px-4 py-2 text-sm font-semibold uppercase tracking-[0.14em] text-amber-100 transition hover:border-amber-200/80"
+                                        >
+                                            {`Show ${singleBucket.label} (${singleBucket.items.length})`}
+                                        </button>
+                                    </>
+                                )}
+
+                                {showBeyondYear ? (
                                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                                        {group.items.map((item) => (
+                                        {singleBucket.items.map((item) => (
                                             <ItemCard
                                                 key={item.url}
                                                 item={item}
@@ -677,28 +780,28 @@ export default function App() {
                                             />
                                         ))}
                                     </div>
-                                </section>
-                            ))}
-                        </section>
-                    ) : (
-                        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                            {visibleItems.length ? (
-                                visibleItems.map((item) => (
-                                    <ItemCard
-                                        key={item.url}
-                                        item={item}
-                                        interactionMode={isDesktopTools ? interactionMode : "none"}
-                                        onToolAction={handleItemToolAction}
-                                        actionState={itemActionState[item.url] || "idle"}
-                                        shake={isDesktopTools && interactionMode === "block-author"}
-                                    />
-                                ))
-                            ) : (
-                                <p className="col-span-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-                                    No entries matched your filters.
-                                </p>
-                            )}
-                        </section>
+                                ) : null}
+                            </section>
+                        ) : (
+                            <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                {visibleItems.length ? (
+                                    visibleItems.map((item) => (
+                                        <ItemCard
+                                            key={item.url}
+                                            item={item}
+                                            interactionMode={isDesktopTools ? interactionMode : "none"}
+                                            onToolAction={handleItemToolAction}
+                                            actionState={itemActionState[item.url] || "idle"}
+                                            shake={isDesktopTools && interactionMode === "block-author"}
+                                        />
+                                    ))
+                                ) : (
+                                    <p className="col-span-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+                                        No entries matched your filters.
+                                    </p>
+                                )}
+                            </section>
+                        )
                     )
                 ) : null}
             </section>

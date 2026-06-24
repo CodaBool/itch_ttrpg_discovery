@@ -7,13 +7,23 @@ const PAIR_TAGS = [
   "generated",
   "generator",
   "tool",
+  "mystery",
+  "investigation",
+  "comedy",
+  "survival-horror",
+  "pbta",
+  "forged-in-the-dark",
+  "sci-fi",
 ];
 
 const SOLO_TAGS = [
   "zine",
   "one-page",
+  "one-shot",
   "rules-lite",
+  "rules-light",
   "supplement",
+  "tabletop",
   "fanzine",
   "micro-rpg",
   "ttrpg",
@@ -36,6 +46,8 @@ const CATEGORIES = [
   { name: "Assets", slug: "game-assets" },
   { name: "Physical Game", slug: "physical-games" },
   { name: "Tool", slug: "tools" },
+  { name: "Other", slug: "misc" },
+  { name: "Game mod", slug: "game-mods" },
 ];
 
 const SEARCH_DEFINITIONS = [

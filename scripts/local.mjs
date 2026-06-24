@@ -1,6 +1,7 @@
 import puppeteer from "puppeteer";
 import { XMLParser } from "fast-xml-parser";
 
+// Keep in sync with worker/src/index.js PAIR_TAGS.
 const PAIR_TAGS = [
   "horror",
   "body-horror",
@@ -8,13 +9,22 @@ const PAIR_TAGS = [
   "generated",
   "generator",
   "tool",
+  "mystery",
+  "investigation",
+  "comedy",
+  "survival-horror",
+  "pbta",
+  "forged-in-the-dark",
+  "sci-fi",
 ];
-
 const SOLO_TAGS = [
   "zine",
   "one-page",
+  "one-shot",
   "rules-lite",
+  "rules-light",
   "supplement",
+  "tabletop",
   "fanzine",
   "micro-rpg",
   "ttrpg",
@@ -37,6 +47,8 @@ const CATEGORIES = [
   { name: "Assets", slug: "game-assets" },
   { name: "Physical Game", slug: "physical-games" },
   { name: "Tool", slug: "tools" },
+  { name: "Other", slug: "misc" },
+  { name: "Game mod", slug: "game-mods" },
 ];
 
 const SEARCH_DEFINITIONS = [
@@ -329,6 +341,17 @@ async function upsertItem(client, item, source, dryRun) {
 
 async function fetchXmlWithRetries(page, url, retryConfig, counters) {
   let lastError = null;
+  let saw403 = false;
+
+  function computeDelay(attempt) {
+    return Math.min(
+      retryConfig.maxDelayMs,
+      Math.floor(
+        retryConfig.baseDelayMs * retryConfig.multiplier ** attempt +
+          Math.random() * retryConfig.jitterMs
+      )
+    );
+  }
 
   for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt += 1) {
     try {
@@ -344,23 +367,26 @@ async function fetchXmlWithRetries(page, url, retryConfig, counters) {
       const status = response.status();
       const isRetryableStatus = status === 403 || status === 429 || status >= 500;
 
-      if (status === 403) counters.http403 += 1;
+      if (status === 403) {
+        counters.http403 += 1;
+        saw403 = true;
+      }
       if (status === 429) counters.http429 += 1;
 
       if (status < 200 || status >= 300) {
         const details = `HTTP ${status} for ${url}`;
 
         if (!isRetryableStatus || attempt === retryConfig.maxRetries) {
-          return { ok: false, status, error: details, attempts: attempt + 1 };
+          return {
+            ok: false,
+            status,
+            error: details,
+            attempts: attempt + 1,
+            had403: saw403,
+          };
         }
 
-        const delay = Math.min(
-          retryConfig.maxDelayMs,
-          Math.floor(
-            retryConfig.baseDelayMs * retryConfig.multiplier ** attempt +
-              Math.random() * retryConfig.jitterMs
-          )
-        );
+        const delay = status === 403 ? retryConfig.challengeDelayMs : computeDelay(attempt);
 
         console.log(
           `[retry ${attempt + 1}/${retryConfig.maxRetries}] ${details}; waiting ${delay}ms before retry`
@@ -371,7 +397,31 @@ async function fetchXmlWithRetries(page, url, retryConfig, counters) {
       }
 
       const xml = await response.text();
-      return { ok: true, status, xml, attempts: attempt + 1 };
+      const looksLikeXml =
+        /^\s*</.test(xml) && (xml.includes("<rss") || xml.includes("<feed"));
+
+      if (!looksLikeXml) {
+        const details = `Non-XML response for ${url}`;
+
+        if (attempt === retryConfig.maxRetries) {
+          return {
+            ok: false,
+            status,
+            error: details,
+            attempts: attempt + 1,
+            had403: saw403,
+          };
+        }
+
+        const delay = saw403 ? retryConfig.challengeDelayMs : computeDelay(attempt);
+        console.log(
+          `[retry ${attempt + 1}/${retryConfig.maxRetries}] ${details}; waiting ${delay}ms before retry`
+        );
+        await sleep(delay);
+        continue;
+      }
+
+      return { ok: true, status, xml, attempts: attempt + 1, had403: saw403 };
     } catch (error) {
       lastError = error;
 
@@ -379,13 +429,7 @@ async function fetchXmlWithRetries(page, url, retryConfig, counters) {
         break;
       }
 
-      const delay = Math.min(
-        retryConfig.maxDelayMs,
-        Math.floor(
-          retryConfig.baseDelayMs * retryConfig.multiplier ** attempt +
-            Math.random() * retryConfig.jitterMs
-        )
-      );
+      const delay = computeDelay(attempt);
 
       console.log(
         `[retry ${attempt + 1}/${retryConfig.maxRetries}] request failed for ${url}: ${error.message}; waiting ${delay}ms`
@@ -400,6 +444,7 @@ async function fetchXmlWithRetries(page, url, retryConfig, counters) {
     status: null,
     error: lastError ? lastError.message : "unknown error",
     attempts: retryConfig.maxRetries + 1,
+    had403: saw403,
   };
 }
 
@@ -411,40 +456,70 @@ function mustEnv(name) {
   return value.trim();
 }
 
+async function openBrowserSession() {
+  const browserWsEndpoint = String(process.env.LOCAL_CHROME_WS_ENDPOINT || "").trim();
+  const browserUrl = String(process.env.LOCAL_CHROME_CDP_URL || "http://127.0.0.1:9222").trim();
+
+  if (browserWsEndpoint) {
+    const browser = await puppeteer.connect({ browserWSEndpoint: browserWsEndpoint });
+    return {
+      browser,
+      attached: true,
+      description: `attached via ws endpoint (${browserWsEndpoint})`,
+    };
+  }
+
+  if (browserUrl) {
+    const browser = await puppeteer.connect({ browserURL: browserUrl });
+    return {
+      browser,
+      attached: true,
+      description: `attached via CDP URL (${browserUrl})`,
+    };
+  }
+
+  const browser = await puppeteer.launch({
+    headless: toBool(process.env.LOCAL_CHROME_HEADLESS, false),
+    executablePath: process.env.LOCAL_CHROME_EXECUTABLE || undefined,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    defaultViewport: { width: 1400, height: 900 },
+  });
+
+  return {
+    browser,
+    attached: false,
+    description: "launched puppeteer-managed browser",
+  };
+}
+
 async function main() {
   const accountId = mustEnv("CLOUDFLARE_ACCOUNT_ID");
   const databaseId = mustEnv("CLOUDFLARE_D1_DATABASE_ID");
   const apiToken = mustEnv("CLOUDFLARE_API_TOKEN");
 
   const dryRun = toBool(process.env.LOCAL_DRY_RUN, false);
-  const maxSearches = Math.max(1, toInt(process.env.LOCAL_MAX_SEARCHES, 120));
+  const maxSearches = Math.max(1, toInt(process.env.LOCAL_MAX_SEARCHES, 500));
   const startIndex = Math.max(0, toInt(process.env.LOCAL_START_INDEX, 0));
 
   const selectedCategoryInput = asList(process.env.LOCAL_CATEGORIES);
   const selectedTagInput = asList(process.env.LOCAL_TAGS);
 
-  const categories =
-    selectedCategoryInput.length === 0
-      ? CATEGORIES
-      : CATEGORIES.filter(
-          (c) =>
-            selectedCategoryInput.includes(c.slug) ||
-            selectedCategoryInput.includes(c.name) ||
-            selectedCategoryInput.includes(c.slug.toLowerCase()) ||
-            selectedCategoryInput.includes(c.name.toLowerCase())
-        );
 
   const retryConfig = {
-    maxRetries: Math.max(0, toInt(process.env.LOCAL_MAX_RETRIES, 4)),
-    baseDelayMs: Math.max(100, toInt(process.env.LOCAL_BACKOFF_BASE_MS, 1250)),
+    maxRetries: Math.max(0, toInt(process.env.LOCAL_MAX_RETRIES, 2)),
+    baseDelayMs: Math.max(100, toInt(process.env.LOCAL_BACKOFF_BASE_MS, 3750)),
     multiplier: Math.max(1, Number(process.env.LOCAL_BACKOFF_MULTIPLIER || 2)),
     maxDelayMs: Math.max(100, toInt(process.env.LOCAL_BACKOFF_MAX_MS, 30000)),
     jitterMs: Math.max(0, toInt(process.env.LOCAL_BACKOFF_JITTER_MS, 250)),
     requestTimeoutMs: Math.max(1000, toInt(process.env.LOCAL_REQUEST_TIMEOUT_MS, 30000)),
+    challengeDelayMs: Math.max(1000, toInt(process.env.LOCAL_CHALLENGE_WAIT_MS, 16000)),
   };
 
+  const cooldownSuccessMs = Math.max(0, toInt(process.env.LOCAL_COOLDOWN_SUCCESS_MS, 1000));
+  const cooldownAfter403Ms = Math.max(0, toInt(process.env.LOCAL_COOLDOWN_AFTER_403_MS, 16000));
+
   const { totalSearches, selectedSearches, startIndex: safeStartIndex } = buildSearches({
-    categories,
+    categories: CATEGORIES,
     tags: selectedTagInput,
     maxSearches,
     startIndex,
@@ -473,101 +548,149 @@ async function main() {
     `Backoff config: retries=${retryConfig.maxRetries}, base=${retryConfig.baseDelayMs}ms, multiplier=${retryConfig.multiplier}, max=${retryConfig.maxDelayMs}ms, jitter=${retryConfig.jitterMs}ms`
   );
 
-  const browser = await puppeteer.launch({
-    headless: toBool(process.env.LOCAL_CHROME_HEADLESS, false),
-    executablePath: process.env.LOCAL_CHROME_EXECUTABLE || undefined,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    defaultViewport: { width: 1400, height: 900 },
-  });
+  const { browser, attached, description } = await openBrowserSession();
+  console.log(`Browser mode: ${description}`);
 
   const page = await browser.newPage();
   await page.setUserAgent(
     process.env.LOCAL_USER_AGENT ||
-      "'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'"
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
   );
 
   const d1 = new CloudflareD1Client({ accountId, databaseId, apiToken });
 
   const failures = [];
+  const searchesToRetry = [];
+
+  async function processSearch(search, totalInPass, indexInPass, options = {}) {
+    const { queueRetry = false, passLabel = "pass" } = options;
+
+    counters.processedSearches += 1;
+    console.log(`\n[${passLabel} ${indexInPass + 1}/${totalInPass}] Refreshing ${search.categorySlug}:${search.term}`);
+    console.log(`URL: ${search.fetchedUrl}`);
+
+    const fetched = await fetchXmlWithRetries(page, search.fetchedUrl, retryConfig, counters);
+
+    if (!fetched.ok) {
+      counters.failedSearches += 1;
+      const failure = {
+        fetched_url: search.fetchedUrl,
+        category: search.categorySlug,
+        term: search.term,
+        status: fetched.status,
+        error: fetched.error,
+        attempts: fetched.attempts,
+        pass: passLabel,
+      };
+
+      failures.push(failure);
+      if (queueRetry) searchesToRetry.push(search);
+
+      console.log(`Failed search after ${fetched.attempts} attempt(s): ${fetched.error}`);
+
+      const cooldownMs = fetched.had403 ? cooldownAfter403Ms : cooldownSuccessMs;
+      if (cooldownMs > 0) {
+        console.log(`Cooldown: waiting ${cooldownMs}ms before next search`);
+        await sleep(cooldownMs);
+      }
+
+      return;
+    }
+
+    let items = [];
+    try {
+      items = parseXmlItems(fetched.xml);
+    } catch (error) {
+      counters.failedSearches += 1;
+      const failure = {
+        fetched_url: search.fetchedUrl,
+        category: search.categorySlug,
+        term: search.term,
+        status: fetched.status,
+        error: `XML parse error: ${error.message}`,
+        attempts: fetched.attempts,
+        pass: passLabel,
+      };
+
+      failures.push(failure);
+      if (queueRetry) searchesToRetry.push(search);
+
+      console.log(`XML parse failure: ${error.message}`);
+
+      const cooldownMs = fetched.had403 ? cooldownAfter403Ms : cooldownSuccessMs;
+      if (cooldownMs > 0) {
+        console.log(`Cooldown: waiting ${cooldownMs}ms before next search`);
+        await sleep(cooldownMs);
+      }
+
+      return;
+    }
+
+    counters.successfulSearches += 1;
+    counters.itemsSeen += items.length;
+
+    let searchInserted = 0;
+    let searchUpdated = 0;
+
+    for (const item of items) {
+      try {
+        const upsert = await upsertItem(d1, item, search, dryRun);
+        counters.inserted += upsert.inserted;
+        counters.updated += upsert.updated;
+        searchInserted += upsert.inserted;
+        searchUpdated += upsert.updated;
+      } catch (error) {
+        failures.push({
+          fetched_url: search.fetchedUrl,
+          item_url: item.url,
+          category: search.categorySlug,
+          term: search.term,
+          error: `D1 upsert failed: ${error.message}`,
+          pass: passLabel,
+        });
+        console.log(`D1 upsert failure for ${item.url}: ${error.message}`);
+      }
+    }
+
+    console.log(
+      `Search complete: items=${items.length}, inserted=${searchInserted}, updated=${searchUpdated}, retriesUsed=${Math.max(0, fetched.attempts - 1)}`
+    );
+    console.log(
+      `Progress: refreshed ${counters.processedSearches} searches, total inserted=${counters.inserted}, updated=${counters.updated}`
+    );
+
+    const cooldownMs = fetched.had403 ? cooldownAfter403Ms : cooldownSuccessMs;
+    if (cooldownMs > 0) {
+      console.log(`Cooldown: waiting ${cooldownMs}ms before next search`);
+      await sleep(cooldownMs);
+    }
+  }
 
   try {
     for (let i = 0; i < selectedSearches.length; i += 1) {
-      const search = selectedSearches[i];
-      counters.processedSearches += 1;
+      await processSearch(selectedSearches[i], selectedSearches.length, i, {
+        queueRetry: true,
+        passLabel: "pass-1",
+      });
+    }
 
-      console.log(
-        `\n[${counters.processedSearches}/${selectedSearches.length}] Refreshing ${search.categorySlug}:${search.term}`
-      );
-      console.log(`URL: ${search.fetchedUrl}`);
+    if (searchesToRetry.length > 0) {
+      console.log(`\nRetry pass starting for ${searchesToRetry.length} failed search(es)`);
 
-      const fetched = await fetchXmlWithRetries(page, search.fetchedUrl, retryConfig, counters);
-
-      if (!fetched.ok) {
-        counters.failedSearches += 1;
-        failures.push({
-          fetched_url: search.fetchedUrl,
-          category: search.categorySlug,
-          term: search.term,
-          status: fetched.status,
-          error: fetched.error,
-          attempts: fetched.attempts,
+      for (let i = 0; i < searchesToRetry.length; i += 1) {
+        await processSearch(searchesToRetry[i], searchesToRetry.length, i, {
+          queueRetry: false,
+          passLabel: "retry-pass",
         });
-        console.log(`Failed search after ${fetched.attempts} attempt(s): ${fetched.error}`);
-        continue;
       }
-
-      let items = [];
-      try {
-        items = parseXmlItems(fetched.xml);
-      } catch (error) {
-        counters.failedSearches += 1;
-        failures.push({
-          fetched_url: search.fetchedUrl,
-          category: search.categorySlug,
-          term: search.term,
-          status: fetched.status,
-          error: `XML parse error: ${error.message}`,
-          attempts: fetched.attempts,
-        });
-        console.log(`XML parse failure: ${error.message}`);
-        continue;
-      }
-
-      counters.successfulSearches += 1;
-      counters.itemsSeen += items.length;
-
-      let searchInserted = 0;
-      let searchUpdated = 0;
-
-      for (const item of items) {
-        try {
-          const upsert = await upsertItem(d1, item, search, dryRun);
-          counters.inserted += upsert.inserted;
-          counters.updated += upsert.updated;
-          searchInserted += upsert.inserted;
-          searchUpdated += upsert.updated;
-        } catch (error) {
-          failures.push({
-            fetched_url: search.fetchedUrl,
-            item_url: item.url,
-            category: search.categorySlug,
-            term: search.term,
-            error: `D1 upsert failed: ${error.message}`,
-          });
-          console.log(`D1 upsert failure for ${item.url}: ${error.message}`);
-        }
-      }
-
-      console.log(
-        `Search complete: items=${items.length}, inserted=${searchInserted}, updated=${searchUpdated}, retriesUsed=${Math.max(0, fetched.attempts - 1)}`
-      );
-      console.log(
-        `Progress: refreshed ${counters.processedSearches}/${selectedSearches.length} searches, total inserted=${counters.inserted}, updated=${counters.updated}`
-      );
     }
   } finally {
     if (!toBool(process.env.LOCAL_KEEP_CHROME_OPEN, false)) {
-      await browser.close();
+      if (attached) {
+        await browser.disconnect();
+      } else {
+        await browser.close();
+      }
     }
   }
 
@@ -592,11 +715,16 @@ async function main() {
   }
 
   console.log("\nBackoff tuning knobs (env vars):");
-  console.log("LOCAL_MAX_RETRIES (default 4)");
-  console.log("LOCAL_BACKOFF_BASE_MS (default 1250)");
+  console.log("LOCAL_MAX_RETRIES (default 2)");
+  console.log("LOCAL_BACKOFF_BASE_MS (default 3750)");
   console.log("LOCAL_BACKOFF_MULTIPLIER (default 2)");
   console.log("LOCAL_BACKOFF_MAX_MS (default 30000)");
   console.log("LOCAL_BACKOFF_JITTER_MS (default 250)");
+  console.log("LOCAL_CHALLENGE_WAIT_MS (default 16000)");
+  console.log("LOCAL_COOLDOWN_SUCCESS_MS (default 2000)");
+  console.log("LOCAL_COOLDOWN_AFTER_403_MS (default 16000)");
+  console.log("LOCAL_CHROME_CDP_URL (optional, example http://127.0.0.1:9222)");
+  console.log("LOCAL_CHROME_WS_ENDPOINT (optional, ws://.../devtools/browser/...)");
 }
 
 main().catch((error) => {

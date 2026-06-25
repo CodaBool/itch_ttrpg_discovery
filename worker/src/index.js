@@ -1,5 +1,26 @@
 import { XMLParser } from "fast-xml-parser";
 
+const LANGUAGE_STOPWORDS = {
+  es: [" el ", " la ", " los ", " las ", " de ", " y ", " en ", " un ", " una ", " para ", " con ", " por "],
+  fr: [" le ", " la ", " les ", " des ", " de ", " et ", " en ", " un ", " une ", " pour ", " avec ", " sur "],
+  de: [" der ", " die ", " das ", " und ", " ist ", " nicht ", " ein ", " eine ", " mit ", " auf ", " für "],
+  pt: [" o ", " a ", " os ", " as ", " de ", " e ", " em ", " um ", " uma ", " para ", " com ", " não "],
+  it: [" il ", " lo ", " la ", " gli ", " le ", " di ", " e ", " un ", " una ", " per ", " con ", " che "],
+  nl: [" de ", " het ", " een ", " en ", " van ", " voor ", " met ", " op ", " is ", " niet ", " dit ", " dat "],
+  pl: [" i ", " w ", " na ", " nie ", " się ", " jest ", " oraz ", " dla ", " z ", " do ", " gry ", " polski "],
+  ru: [" и ", " в ", " на ", " не ", " что ", " для ", " это ", " как ", " по ", " из ", " русский ", " игра "],
+  ja: [" の ", " に ", " を ", " と ", " です ", " する ", " ます ", " で ", " から ", " 日本語 "],
+  ko: [" 이 ", " 가 ", " 을 ", " 를 ", " 은 ", " 는 ", " 에 ", " 에서 ", " 한국어 ", " 게임 "],
+  zh: [" 的 ", " 了 ", " 在 ", " 是 ", " 和 ", " 游戏 ", " 这 ", " 中文 ", " 简体 ", " 繁體 "],
+};
+
+const SCRIPT_LANGUAGE_RULES = [
+  { code: "ja", regex: /[\u3040-\u30ff]/u },
+  { code: "ko", regex: /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/u },
+  { code: "ru", regex: /[\u0400-\u04ff]/u },
+  { code: "zh", regex: /[\u3400-\u9fff\uf900-\ufaff]/u },
+];
+
 const PAIR_TAGS = [
   "horror",
   "body-horror",
@@ -135,6 +156,40 @@ function parseAuthorUrlFromFetchedUrl(guid) {
   return guidStr ? `https://${guidStr}.itch.io` : "";
 }
 
+function toLanguageText(item) {
+  const title = textValue(item.plainTitle) || textValue(item.title);
+  const description = stripHtmlAndNormalizeWhitespace(textValue(item.description));
+  return `${title} ${description}`.trim();
+}
+
+function detectItemLanguage(item) {
+  const raw = toLanguageText(item);
+  if (!raw) return null;
+
+  const padded = ` ${raw.toLowerCase()} `;
+
+  for (const rule of SCRIPT_LANGUAGE_RULES) {
+    if (rule.regex.test(raw)) return rule.code;
+  }
+
+  let best = { code: null, score: 0 };
+
+  for (const [code, words] of Object.entries(LANGUAGE_STOPWORDS)) {
+    let score = 0;
+    for (const word of words) {
+      if (padded.includes(word)) score += 1;
+    }
+
+    if (score > best.score) {
+      best = { code, score };
+    }
+  }
+
+  // Require a stronger signal to reduce false positives between latin languages.
+  if (!best.code || best.score < 3) return null;
+  return best.code;
+}
+
 function normalizeSource(source) {
   return {
     category: source.category,
@@ -179,6 +234,7 @@ function normalizeItem(item, fetchedUrl) {
     url: link,
     title,
     description: stripHtmlAndNormalizeWhitespace(textValue(item.description)),
+    language: detectItemLanguage(item),
     image_url: textValue(item.imageurl),
     price: textValue(item.price),
     publish_date: textValue(item.pubDate),
@@ -304,8 +360,8 @@ async function upsertItem(env, item, source) {
     await env.DB.prepare(
       `INSERT INTO items (
         url, source, title, description, image_url, price, publish_date, update_date,
-        author, author_url, first_seen_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+        author, author_url, language, first_seen_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
     )
       .bind(
         item.url,
@@ -317,7 +373,8 @@ async function upsertItem(env, item, source) {
         item.publish_date,
         item.update_date,
         item.author,
-        item.author_url
+        item.author_url,
+        item.language
       )
       .run();
 
@@ -336,6 +393,7 @@ async function upsertItem(env, item, source) {
          update_date = ?,
          author = ?,
          author_url = ?,
+         language = ?,
          updated_at = CURRENT_TIMESTAMP
      WHERE url = ?`
   )
@@ -349,6 +407,7 @@ async function upsertItem(env, item, source) {
       item.update_date,
       item.author,
       item.author_url,
+      item.language,
       item.url
     )
     .run();
@@ -621,7 +680,7 @@ async function listItems(request, env) {
   const results = await env.DB.prepare(
     `SELECT
       url, source, title, description, image_url, price, publish_date, update_date,
-      author, author_url, rating, engagement, ai, first_seen_at, updated_at
+      author, author_url, language, rating, engagement, ai, first_seen_at, updated_at
      FROM items
      ORDER BY updated_at DESC
      LIMIT ? OFFSET ?`

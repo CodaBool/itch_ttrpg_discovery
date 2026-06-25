@@ -82,6 +82,7 @@ const STORAGE_KEYS = {
     category: "itch-feed:selected-category",
     system: "itch-feed:selected-system",
     tags: "itch-feed:selected-tags",
+    hideNonEnglish: "itch-feed:hide-non-english",
     readingMode: "itch-feed:reading-mode",
     hiddenUrls: "itch-feed:hidden-urls",
     blockedAuthors: "itch-feed:blocked-authors",
@@ -277,6 +278,7 @@ export default function App() {
     const [itemActionState, setItemActionState] = useState({});
     const [isDesktopTools, setIsDesktopTools] = useState(false);
     const [showBeyondYear, setShowBeyondYear] = useState(false);
+    const [hideNonEnglish, setHideNonEnglish] = useState(() => loadStoredBool(STORAGE_KEYS.hideNonEnglish, true));
     const [readingMode, setReadingMode] = useState(() => loadStoredBool(STORAGE_KEYS.readingMode, true));
 
     const availableSystems = useMemo(() => {
@@ -339,6 +341,11 @@ export default function App() {
         if (typeof window === "undefined") return;
         window.localStorage.setItem(STORAGE_KEYS.blockedAuthors, JSON.stringify(blockedAuthors));
     }, [blockedAuthors]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        window.localStorage.setItem(STORAGE_KEYS.hideNonEnglish, JSON.stringify(hideNonEnglish));
+    }, [hideNonEnglish]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -430,6 +437,8 @@ export default function App() {
 
             if (!categoryMatch) return false;
 
+            if (hideNonEnglish && item.language != null) return false;
+
             if (hiddenUrlSet.has(item.url)) return false;
 
             const authorKey = normalizeAuthorKey(item.author);
@@ -445,7 +454,7 @@ export default function App() {
             if (selectedTags.length === 0) return true;
             return selectedTags.some((tag) => tags.has(tag));
         });
-    }, [items, selectedCategory, selectedSystem, selectedTags, hiddenUrlSet, blockedAuthorSet]);
+    }, [items, selectedCategory, selectedSystem, selectedTags, hiddenUrlSet, blockedAuthorSet, hideNonEnglish]);
 
     function runItemAction(item, mode) {
         const animationType = mode === "block-author" ? "cut" : "stamp";
@@ -640,6 +649,16 @@ export default function App() {
                                     <span className="font-semibold uppercase tracking-[0.12em]">Reading Mode</span>
                                 </label>
                             ) : null}
+
+                            <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
+                                <input
+                                    type="checkbox"
+                                    checked={hideNonEnglish}
+                                    onChange={(event) => setHideNonEnglish(event.target.checked)}
+                                    className="h-4 w-4 accent-amber-300"
+                                />
+                                <span className="font-semibold uppercase tracking-[0.12em]">Hide languages other than English</span>
+                            </label>
 
                             {isDesktopTools ? (
                                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">

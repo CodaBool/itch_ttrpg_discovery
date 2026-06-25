@@ -1,6 +1,27 @@
 import puppeteer from "puppeteer";
 import { XMLParser } from "fast-xml-parser";
 
+const LANGUAGE_STOPWORDS = {
+  es: [" el ", " la ", " los ", " las ", " de ", " y ", " en ", " un ", " una ", " para ", " con ", " por "],
+  fr: [" le ", " la ", " les ", " des ", " de ", " et ", " en ", " un ", " une ", " pour ", " avec ", " sur "],
+  de: [" der ", " die ", " das ", " und ", " ist ", " nicht ", " ein ", " eine ", " mit ", " auf ", " für "],
+  pt: [" o ", " a ", " os ", " as ", " de ", " e ", " em ", " um ", " uma ", " para ", " com ", " não "],
+  it: [" il ", " lo ", " la ", " gli ", " le ", " di ", " e ", " un ", " una ", " per ", " con ", " che "],
+  nl: [" de ", " het ", " een ", " en ", " van ", " voor ", " met ", " op ", " is ", " niet ", " dit ", " dat "],
+  pl: [" i ", " w ", " na ", " nie ", " się ", " jest ", " oraz ", " dla ", " z ", " do ", " gry ", " polski "],
+  ru: [" и ", " в ", " на ", " не ", " что ", " для ", " это ", " как ", " по ", " из ", " русский ", " игра "],
+  ja: [" の ", " に ", " を ", " と ", " です ", " する ", " ます ", " で ", " から ", " 日本語 "],
+  ko: [" 이 ", " 가 ", " 을 ", " 를 ", " 은 ", " 는 ", " 에 ", " 에서 ", " 한국어 ", " 게임 "],
+  zh: [" 的 ", " 了 ", " 在 ", " 是 ", " 和 ", " 游戏 ", " 这 ", " 中文 ", " 简体 ", " 繁體 "],
+};
+
+const SCRIPT_LANGUAGE_RULES = [
+  { code: "ja", regex: /[\u3040-\u30ff]/u },
+  { code: "ko", regex: /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/u },
+  { code: "ru", regex: /[\u0400-\u04ff]/u },
+  { code: "zh", regex: /[\u3400-\u9fff\uf900-\ufaff]/u },
+];
+
 // Keep in sync with worker/src/index.js PAIR_TAGS.
 const PAIR_TAGS = [
   "horror",
@@ -127,6 +148,39 @@ function parseAuthorUrlFromFetchedUrl(guid) {
   return author ? `https://${author}.itch.io` : "";
 }
 
+function toLanguageText(item) {
+  const title = textValue(item.plainTitle) || textValue(item.title);
+  const description = stripHtmlAndNormalizeWhitespace(textValue(item.description));
+  return `${title} ${description}`.trim();
+}
+
+function detectItemLanguage(item) {
+  const raw = toLanguageText(item);
+  if (!raw) return null;
+
+  const padded = ` ${raw.toLowerCase()} `;
+
+  for (const rule of SCRIPT_LANGUAGE_RULES) {
+    if (rule.regex.test(raw)) return rule.code;
+  }
+
+  let best = { code: null, score: 0 };
+
+  for (const [code, words] of Object.entries(LANGUAGE_STOPWORDS)) {
+    let score = 0;
+    for (const word of words) {
+      if (padded.includes(word)) score += 1;
+    }
+
+    if (score > best.score) {
+      best = { code, score };
+    }
+  }
+
+  if (!best.code || best.score < 3) return null;
+  return best.code;
+}
+
 function normalizeSource(source) {
   return {
     category: source.category,
@@ -171,6 +225,7 @@ function normalizeItem(item) {
     url: link,
     title,
     description: stripHtmlAndNormalizeWhitespace(textValue(item.description)),
+    language: detectItemLanguage(item),
     image_url: textValue(item.imageurl),
     price: textValue(item.price),
     publish_date: textValue(item.pubDate),
@@ -288,8 +343,8 @@ async function upsertItem(client, item, source, dryRun) {
     await client.query(
       `INSERT INTO items (
         url, source, title, description, image_url, price, publish_date, update_date,
-        author, author_url, first_seen_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        author, author_url, language, first_seen_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
       [
         item.url,
         JSON.stringify([normalizeSource(source)]),
@@ -301,6 +356,7 @@ async function upsertItem(client, item, source, dryRun) {
         item.update_date,
         item.author,
         item.author_url,
+        item.language,
       ]
     );
 
@@ -320,6 +376,7 @@ async function upsertItem(client, item, source, dryRun) {
          update_date = ?,
          author = ?,
          author_url = ?,
+         language = ?,
          updated_at = CURRENT_TIMESTAMP
      WHERE url = ?`,
     [
@@ -332,6 +389,7 @@ async function upsertItem(client, item, source, dryRun) {
       item.update_date,
       item.author,
       item.author_url,
+      item.language,
       item.url,
     ]
   );
@@ -479,7 +537,7 @@ async function openBrowserSession() {
   }
 
   const browser = await puppeteer.launch({
-    headless: toBool(process.env.LOCAL_CHROME_HEADLESS, false),
+    headless: toBool(process.env.LOCAL_CHROME_HEADLESS, true),
     executablePath: process.env.LOCAL_CHROME_EXECUTABLE || undefined,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
     defaultViewport: { width: 1400, height: 900 },
@@ -501,7 +559,6 @@ async function main() {
   const maxSearches = Math.max(1, toInt(process.env.LOCAL_MAX_SEARCHES, 500));
   const startIndex = Math.max(0, toInt(process.env.LOCAL_START_INDEX, 0));
 
-  const selectedCategoryInput = asList(process.env.LOCAL_CATEGORIES);
   const selectedTagInput = asList(process.env.LOCAL_TAGS);
 
 

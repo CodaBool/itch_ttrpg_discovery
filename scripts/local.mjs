@@ -2,7 +2,7 @@ import puppeteer from "puppeteer";
 import { XMLParser } from "fast-xml-parser";
 
 const LANGUAGE_STOPWORDS = {
-  es: [" el ", " la ", " los ", " las ", " de ", " y ", " en ", " un ", " una ", " para ", " con ", " por "],
+  es: [" el ", " la ", " los ", " las ", " de ", "del", " adventura ", " minimalista ", " spanish ", " y ", " en ", " un ", " una ", " para ", " gratuita ", " con ", " por "],
   fr: [" le ", " la ", " les ", " des ", " de ", " et ", " en ", " un ", " une ", " pour ", " avec ", " sur "],
   de: [" der ", " die ", " das ", " und ", " ist ", " nicht ", " ein ", " eine ", " mit ", " auf ", " für "],
   pt: [" o ", " a ", " os ", " as ", " de ", " e ", " em ", " um ", " uma ", " para ", " com ", " não "],
@@ -572,8 +572,8 @@ async function main() {
     challengeDelayMs: Math.max(1000, toInt(process.env.LOCAL_CHALLENGE_WAIT_MS, 16000)),
   };
 
-  const cooldownSuccessMs = Math.max(0, toInt(process.env.LOCAL_COOLDOWN_SUCCESS_MS, 1000));
-  const cooldownAfter403Ms = Math.max(0, toInt(process.env.LOCAL_COOLDOWN_AFTER_403_MS, 16000));
+  const cooldownSuccessMs = Math.max(0, toInt(process.env.LOCAL_COOLDOWN_SUCCESS_MS, 250));
+  const cooldownAfter403Ms = Math.max(0, toInt(process.env.LOCAL_COOLDOWN_AFTER_403_MS, 10000));
 
   const { totalSearches, selectedSearches, startIndex: safeStartIndex } = buildSearches({
     categories: CATEGORIES,

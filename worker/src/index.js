@@ -1,7 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 
 const LANGUAGE_STOPWORDS = {
-  es: [" el ", " la ", " los ", " las ", " de ", " y ", " en ", " un ", " una ", " para ", " con ", " por "],
+  es: [" el ", " la ", " los ", " las ", " de ", "del", " adventura ", " minimalista ", " spanish ", " y ", " en ", " un ", " una ", " para ", " gratuita ", " con ", " por "],
   fr: [" le ", " la ", " les ", " des ", " de ", " et ", " en ", " un ", " une ", " pour ", " avec ", " sur "],
   de: [" der ", " die ", " das ", " und ", " ist ", " nicht ", " ein ", " eine ", " mit ", " auf ", " für "],
   pt: [" o ", " a ", " os ", " as ", " de ", " e ", " em ", " um ", " uma ", " para ", " com ", " não "],

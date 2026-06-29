@@ -19,6 +19,7 @@ const PAIR_TAGS = [
   "generation",
   "generated",
   "generator",
+  "analog-horror",
   "tool",
   "mystery",
   "investigation",
@@ -27,6 +28,7 @@ const PAIR_TAGS = [
   "pbta",
   "forged-in-the-dark",
   "sci-fi",
+  "tabletop",
 ];
 
 const SOLO_TAGS = [
@@ -36,7 +38,6 @@ const SOLO_TAGS = [
   "rules-lite",
   "rules-light",
   "supplement",
-  "tabletop",
   "fanzine",
   "micro-rpg",
   "ttrpg",
@@ -57,6 +58,7 @@ const SOLO_TAGS = [
 
 const SYSTEM_DEFINITIONS = [
     { key: "liminal-horror", label: "Liminal Horror", tags: ["liminal-horror"] },
+    { key: "brindlewood", label: "Brindlewood Bay", tags: ["carved-from-brindlewood", "brindlewood"] },
     { key: "mothership", label: "Mothership", tags: ["mothership", "mothership-rpg", "panic-engine"] },
     { key: "mork-borg", label: "Mork Borg", tags: ["mork-borg"] },
     { key: "delta-green", label: "Delta Green", tags: ["delta-green"] },
@@ -65,7 +67,11 @@ const SYSTEM_DEFINITIONS = [
     { key: "mausritter", label: "Mausritter", tags: ["mausritter"] },
     { key: "cairn", label: "Cairn", tags: ["cairn"] },
     { key: "into-the-odd", label: "Into the Odd", tags: ["into-the-odd"] },
+    { key: "electric-bastionland", label: "Electric Bastionland", tags: ["electric-bastionland"] },
     { key: "fist", label: "FIST", tags: ["fist"] },
+    { key: "cain", label: "CAIN", tags: ["cain"] },
+    { key: "trophy-dark", label: "Trophy Dark", tags: ["trophy-dark"] },
+    { key: "public-access", label: "Public Access", tags: ["public-access"] },
 ];
 
 const SYSTEM_TAGS = SYSTEM_DEFINITIONS.map((system) => system.key);

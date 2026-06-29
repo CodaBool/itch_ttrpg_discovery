@@ -144,7 +144,7 @@ export default function ItemCard({
         }
       }}
       className={[
-        "group feed-item relative flex h-full cursor-pointer flex-col overflow-visible rounded-2xl border border-white/10 bg-slate-950/55 p-4 shadow-[0_20px_40px_-28px_rgba(0,0,0,0.9)] backdrop-blur-sm",
+        "group feed-item relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950/55 p-4 shadow-[0_20px_40px_-28px_rgba(0,0,0,0.9)] backdrop-blur-sm",
         actionState === "stamp" ? "item-stamp-out" : "",
         actionState === "cut" ? "item-cut-out" : "",
         shake ? "item-shake" : "",
@@ -185,19 +185,22 @@ export default function ItemCard({
         ) : null}
       </div>
 
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <h2 className="line-clamp-2 text-lg font-semibold leading-tight text-slate-50">{displayTitle}</h2>
-        <span
-          className={[
-            "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
-            isFree
-              ? "border border-orange-200/60 bg-orange-300/20 text-orange-100"
-              : "border border-emerald-300/40 bg-emerald-300/10 text-emerald-100",
-          ].join(" ")}
-        >
-          <span className={priceTextRevealClass}>{isFree ? "FREE" : item.price || "-"}</span>
-        </span>
-      </div>
+<div className="mb-3 flex min-w-0 items-start justify-between gap-3">
+  <h2 className="min-w-0 flex-1 break-words line-clamp-2 text-lg font-semibold leading-tight text-slate-50">
+    {displayTitle}
+  </h2>
+
+  <span
+    className={[
+      "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
+      isFree
+        ? "border border-orange-200/60 bg-orange-300/20 text-orange-100"
+        : "border border-emerald-300/40 bg-emerald-300/10 text-emerald-100",
+    ].join(" ")}
+  >
+    <span className={priceTextRevealClass}>{isFree ? "FREE" : item.price || "-"}</span>
+  </span>
+</div>
 
       <p className="line-clamp-4 text-[1rem] leading-relaxed text-slate-300">{displayDescription || "No description available."}</p>
 
@@ -217,8 +220,8 @@ export default function ItemCard({
         ) : null}
       </div>
 
-      <div className="mt-auto flex items-center justify-between pt-2 text-xs text-slate-400">
-        <div className="flex items-center gap-4">
+<div className="mt-auto flex min-w-0 items-center justify-between gap-3 pt-2 text-xs text-slate-400">
+  <div className="flex min-w-0 items-center gap-4">
           <span className={hoverRevealClass}>{formatDate(item.publish_date)}</span>
           <div className="flex items-center gap-4">
             {showRatingStar ? (
@@ -285,7 +288,7 @@ export default function ItemCard({
             rel="noreferrer"
             onClick={(event) => event.stopPropagation()}
             onAuxClick={(event) => event.stopPropagation()}
-            className={`inline-flex items-center justify-center rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 transition hover:border-white/40 ${hoverRevealClass}`}
+            className={`min-w-0 max-w-[45%] truncate inline-flex items-center justify-center rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 transition hover:border-white/40 ${hoverRevealClass}`}
           >
             {formatAuthorName(item.author)}
           </a>

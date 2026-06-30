@@ -102,7 +102,7 @@ function json(data, init = {}) {
   headers.set("content-type", "application/json; charset=utf-8");
   headers.set("access-control-allow-origin", "*");
   headers.set("access-control-allow-methods", "GET,POST,OPTIONS");
-  headers.set("access-control-allow-headers", "content-type");
+  headers.set("access-control-allow-headers", "content-type,x-admin-token");
 
   return new Response(JSON.stringify(data), {
     ...init,

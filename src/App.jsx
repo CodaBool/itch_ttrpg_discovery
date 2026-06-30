@@ -568,7 +568,7 @@ export default function App() {
                 try {
                     const client = createAdminClientFromEnv();
                     await banUrl(client, item.url, "Banned from UI", "local-ui");
-                    setHiddenUrls((prev) => (prev.includes(item.url) ? prev : [...prev, item.url]));
+                    setItems((prev) => prev.filter((row) => row.url !== item.url));
                 } catch (err) {
                     setError(err?.message || "Failed to ban item.");
                 }
@@ -585,7 +585,7 @@ export default function App() {
             try {
                 const client = createAdminClientFromEnv();
                 await banAuthor(client, authorKey, "Banned from UI", "local-ui");
-                setBlockedAuthors((prev) => (prev.includes(authorKey) ? prev : [...prev, authorKey]));
+                setItems((prev) => prev.filter((row) => normalizeAuthorKey(row.author) !== authorKey));
             } catch (err) {
                 setError(err?.message || "Failed to ban author.");
             }

@@ -809,7 +809,27 @@ async function banEntity(request, env) {
     .bind(kind, value, reason, createdBy)
     .run();
 
-  return json({ ok: true, kind, value });
+  const countQuery = kind === "url"
+    ? "SELECT COUNT(*) AS count FROM items WHERE lower(trim(url)) = ?"
+    : "SELECT COUNT(*) AS count FROM items WHERE lower(trim(author)) = ?";
+
+  const deleteQuery = kind === "url"
+    ? "DELETE FROM items WHERE lower(trim(url)) = ?"
+    : "DELETE FROM items WHERE lower(trim(author)) = ?";
+
+  const existingCountRow = await env.DB.prepare(countQuery)
+    .bind(value)
+    .first();
+
+  const removedCount = Number(existingCountRow?.count || 0);
+
+  if (removedCount > 0) {
+    await env.DB.prepare(deleteQuery)
+      .bind(value)
+      .run();
+  }
+
+  return json({ ok: true, kind, value, removed_count: removedCount });
 }
 
 export default {

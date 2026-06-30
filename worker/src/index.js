@@ -5,10 +5,7 @@ import { franc } from "franc";
 const PAIR_TAGS = [
   "horror",
   "body-horror",
-  // "generation",
-  // "generated",
   "generator",
-  // "analog-horror",
   "tool",
   "mystery",
   "investigation",

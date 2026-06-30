@@ -20,10 +20,7 @@ const CATEGORY_ALIAS_BY_SLUG = {
 const PAIR_TAGS = [
   "horror",
   "body-horror",
-//   "generation",
-//   "generated",
   "generator",
-//   "analog-horror",
   "tool",
   "mystery",
   "investigation",
@@ -106,6 +103,7 @@ const STORAGE_KEYS = {
     readingMode: "itch-feed:reading-mode",
     hiddenUrls: "itch-feed:hidden-urls",
     blockedAuthors: "itch-feed:blocked-authors",
+    alwaysShowBeyondYear: "itch-feed:always-show-over-365",
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://itch-ttrpg-discovery.codabool.workers.dev";
@@ -329,6 +327,7 @@ export default function App() {
     const [itemActionState, setItemActionState] = useState({});
     const [isDesktopTools, setIsDesktopTools] = useState(false);
     const [showBeyondYear, setShowBeyondYear] = useState(false);
+    const [alwaysShowBeyondYear, setAlwaysShowBeyondYear] = useState(() => loadStoredBool(STORAGE_KEYS.alwaysShowBeyondYear, false));
     const [hideNonEnglish, setHideNonEnglish] = useState(() => loadStoredBool(STORAGE_KEYS.hideNonEnglish, true));
     const [hideAiAssisted, setHideAiAssisted] = useState(() => loadStoredBool(STORAGE_KEYS.hideAiAssisted, true));
     const [minRatings, setMinRatings] = useState(() => loadStoredNumber(STORAGE_KEYS.minRatings, 0, 0, 10));
@@ -414,6 +413,11 @@ export default function App() {
         if (typeof window === "undefined") return;
         window.localStorage.setItem(STORAGE_KEYS.readingMode, JSON.stringify(readingMode));
     }, [readingMode]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        window.localStorage.setItem(STORAGE_KEYS.alwaysShowBeyondYear, JSON.stringify(alwaysShowBeyondYear));
+    }, [alwaysShowBeyondYear]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -638,6 +642,12 @@ export default function App() {
 
     const showTimelineLayout = groupedBuckets.length > 1;
     const singleBucket = groupedBuckets.length === 1 ? groupedBuckets[0] : null;
+    const shouldShowBeyondYear = showBeyondYear || alwaysShowBeyondYear;
+
+    function enableAlwaysShowBeyondYear() {
+        setAlwaysShowBeyondYear(true);
+        setShowBeyondYear(true);
+    }
 
     useEffect(() => {
         setShowBeyondYear(false);
@@ -650,7 +660,7 @@ export default function App() {
     return (
         <main
             className={[
-                "min-h-screen bg-[radial-gradient(circle_at_15%_0%,rgba(249,115,22,.2),transparent_45%),radial-gradient(circle_at_90%_20%,rgba(14,165,233,.18),transparent_40%),linear-gradient(180deg,#020617_0%,#0f172a_100%)] px-4 pb-14 pt-2 text-slate-100 md:px-8",
+                "min-h-screen bg-[radial-gradient(circle_at_15%_0%,rgba(249,115,22,.2),transparent_45%),radial-gradient(circle_at_90%_20%,rgba(14,165,233,.18),transparent_40%),linear-gradient(180deg,#020617_0%,#0f172a_100%)] px-1 pb-14 pt-1 text-slate-100 md:px-8",
                 isDesktopTools && interactionMode === "block-author" ? "tool-mode-block" : "",
                 isDesktopTools && interactionMode === "hide-item" ? "tool-mode-stamp" : "",
             ].join(" ")}
@@ -733,7 +743,7 @@ export default function App() {
                                 />
                             </div>
 
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Tags - <span className="lowercase">if any tag is found from the selected tags below, the result is shown (in other words deselection does not exclude)</span></p>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Tags - <span className="lowercase tracking-[0.05em]">if any tag is found from the selected tags below, the result is shown (deselection does not exclude)</span></p>
                             <div className="flex flex-wrap gap-2">
                                 {NON_SYSTEM_TAGS.map((tag) => (
                                     <FilterPill
@@ -842,7 +852,7 @@ export default function App() {
                                 >
                                     <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8" />
                                 </svg>
-                                GitHub
+                                GitHub - GPL3 - Free
                             </a>
                         </div>
                     </div>
@@ -934,24 +944,36 @@ export default function App() {
 
                                     {group.key === "over-365" ? (
                                         <div className="space-y-3">
-                                            {showBeyondYear ? null : (
+                                            {shouldShowBeyondYear ? null : (
                                                 <>
                                                     <p className="rounded-xl border border-amber-200/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100/90">
                                                         Data is gathered by itch's newest page. Results over a year old are limited.
                                                     </p>
 
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setShowBeyondYear(true)}
-                                                        className="rounded-xl border border-amber-200/50 bg-amber-300/15 px-4 py-2 text-sm font-semibold uppercase tracking-[0.14em] text-amber-100 transition hover:border-amber-200/80"
-                                                    >
-                                                        {`Show ${group.label} (${group.items.length})`}
-                                                    </button>
+                                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowBeyondYear(true)}
+                                                            className="rounded-xl border border-amber-200/50 bg-amber-300/15 px-4 py-2 text-sm font-semibold uppercase tracking-[0.14em] text-amber-100 transition hover:border-amber-200/80"
+                                                        >
+                                                            {`Show ${group.label} (${group.items.length})`}
+                                                        </button>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={enableAlwaysShowBeyondYear}
+                                                            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-amber-100/90 transition hover:text-amber-100"
+                                                            aria-label="Always show over 365 day items"
+                                                        >
+                                                            <span className="inline-flex h-4 w-4 items-center justify-center rounded-sm border border-amber-200/70 bg-amber-300/10" aria-hidden="true" />
+                                                            <span>Always show over 365 day items</span>
+                                                        </button>
+                                                    </div>
                                                 </>
                                             )}
 
-                                            {showBeyondYear ? (
-                                                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                            {shouldShowBeyondYear ? (
+                                                <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 lg:gap-3 2xl:grid-cols-4">
                                                     {group.items.map((item) => (
                                                         <ItemCard
                                                             key={item.url}
@@ -969,7 +991,7 @@ export default function App() {
                                             ) : null}
                                         </div>
                                     ) : (
-                                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                        <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 lg:gap-3 2xl:grid-cols-4">
                                             {group.items.map((item) => (
                                                 <ItemCard
                                                     key={item.url}
@@ -991,24 +1013,36 @@ export default function App() {
                     ) : (
                         singleBucket?.key === "over-365" ? (
                             <section className="mt-6 space-y-3">
-                                {showBeyondYear ? null : (
+                                {shouldShowBeyondYear ? null : (
                                     <>
                                         <p className="rounded-xl border border-amber-200/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100/90">
                                             Data is gathered by itch's newest page. Results over a year old are limited.
                                         </p>
 
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowBeyondYear(true)}
-                                            className="rounded-xl border border-amber-200/50 bg-amber-300/15 px-4 py-2 text-sm font-semibold uppercase tracking-[0.14em] text-amber-100 transition hover:border-amber-200/80"
-                                        >
-                                            {`Show ${singleBucket.label} (${singleBucket.items.length})`}
-                                        </button>
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowBeyondYear(true)}
+                                                className="rounded-xl border border-amber-200/50 bg-amber-300/15 px-4 py-2 text-sm font-semibold uppercase tracking-[0.14em] text-amber-100 transition hover:border-amber-200/80"
+                                            >
+                                                {`Show ${singleBucket.label} (${singleBucket.items.length})`}
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={enableAlwaysShowBeyondYear}
+                                                className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-amber-100/90 transition hover:text-amber-100"
+                                                aria-label="Always show over 365 day items"
+                                            >
+                                                <span className="inline-flex h-4 w-4 items-center justify-center rounded-sm border border-amber-200/70 bg-amber-300/10" aria-hidden="true" />
+                                                <span>Always show over 365 day items</span>
+                                            </button>
+                                        </div>
                                     </>
                                 )}
 
-                                {showBeyondYear ? (
-                                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                {shouldShowBeyondYear ? (
+                                    <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 lg:gap-3 2xl:grid-cols-4">
                                         {singleBucket.items.map((item) => (
                                             <ItemCard
                                                 key={item.url}
@@ -1026,7 +1060,7 @@ export default function App() {
                                 ) : null}
                             </section>
                         ) : (
-                            <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            <section className="mt-6 grid grid-cols-2 gap-2 lg:grid-cols-3 lg:gap-3 2xl:grid-cols-4">
                                 {visibleItems.length ? (
                                     visibleItems.map((item) => (
                                         <ItemCard

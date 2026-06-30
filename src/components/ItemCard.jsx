@@ -169,7 +169,7 @@ export default function ItemCard({
         }
       }}
       className={[
-        "group feed-item relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950/55 p-4 shadow-[0_20px_40px_-28px_rgba(0,0,0,0.9)] backdrop-blur-sm",
+        "group feed-item relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border border-white/10 bg-slate-950/55 p-3 shadow-[0_20px_40px_-30px_rgba(0,0,0,0.9)] backdrop-blur-sm",
         actionState === "stamp" ? "item-stamp-out" : "",
         actionState === "cut" ? "item-cut-out" : "",
         shake ? "item-shake" : "",
@@ -199,25 +199,25 @@ export default function ItemCard({
         </div>
       ) : null}
 
-      <div className="mb-3 aspect-[315/250] overflow-hidden rounded-xl border border-white/10 bg-black">
+      <div className="mb-2.5 aspect-[451/338] overflow-hidden rounded-lg border border-white/10 bg-black">
         {item.image_url ? (
           <img
             src={item.image_url}
             alt={displayTitle}
             loading="lazy"
-            className="h-full w-full object-contain"
+            className="h-full w-full object-cover"
           />
         ) : null}
       </div>
 
-<div className="mb-3 flex min-w-0 items-start justify-between gap-3">
-  <h2 className="min-w-0 flex-1 break-words line-clamp-2 text-lg font-semibold leading-tight text-slate-50">
+<div className="mb-2.5 flex min-w-0 items-start justify-between gap-2">
+  <h2 className="min-w-0 flex-1 break-words line-clamp-2 text-base font-semibold leading-tight text-slate-50">
     {displayTitle}
   </h2>
 
   <span
     className={[
-      "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
+      "shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em]",
       isFree
         ? "border border-orange-200/60 bg-orange-300/20 text-orange-100"
         : "border border-emerald-300/40 bg-emerald-300/10 text-emerald-100",
@@ -227,25 +227,25 @@ export default function ItemCard({
   </span>
 </div>
 
-      <p className="line-clamp-4 text-[1rem] leading-relaxed text-slate-300">{displayDescription || "No description available."}</p>
+      <p className="line-clamp-3 text-sm leading-relaxed text-slate-300">{displayDescription || "No description available."}</p>
 
-      <div className={`mt-3 flex flex-wrap gap-2 ${hoverRevealClass}`}>
+      <div className={`mt-2.5 flex flex-wrap gap-1.5 ${hoverRevealClass}`}>
         {sourceChips.map((s) => (
           <span
             key={`${s.category_slug}-${s.term}`}
-            className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-slate-200"
+            className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-slate-200"
           >
             {formatSourceTerm(s.term)}
           </span>
         ))}
         {showNoAiBadge ? (
-          <span className="rounded-full border border-cyan-200/35 bg-cyan-300/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-cyan-100">
+          <span className="rounded-full border border-cyan-200/35 bg-cyan-300/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-cyan-100">
             no ai
           </span>
         ) : null}
       </div>
 
-<div className="mt-auto flex min-w-0 items-center justify-between gap-3 pt-2 text-xs text-slate-400">
+<div className="mt-auto flex min-w-0 items-center justify-between gap-2 pt-1.5 text-[11px] text-slate-400">
   <div className="flex min-w-0 items-center gap-4">
           <span className={hoverRevealClass}>{formatDate(item.publish_date)}</span>
           <div className="flex items-center gap-4">
@@ -333,14 +333,14 @@ export default function ItemCard({
               }
               event.stopPropagation();
             }}
-            className={`min-w-0 max-w-[45%] truncate inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 transition hover:border-white/40 ${hoverRevealClass}`}
+            className={`min-w-0 max-w-[50%] truncate inline-flex items-center justify-center gap-1 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-100 transition hover:border-white/40 ${hoverRevealClass}`}
           >
             {isVipAuthor ? (
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 xmlSpace="preserve"
                 viewBox="0 0 220 220"
-                className="h-3.5 w-3.5 shrink-0 text-amber-300"
+                className="h-3 w-3 shrink-0 text-amber-300"
                 aria-hidden="true"
               >
                 <path

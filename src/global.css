@@ -162,3 +162,7 @@
 	animation: metricDramaticBounce 0.95s cubic-bezier(0.3, 0.7, 0.2, 1) infinite;
 	transform-origin: center;
 }
+
+button {
+	cursor: pointer;
+}

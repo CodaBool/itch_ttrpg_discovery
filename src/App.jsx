@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import FilterPill from "./components/FilterPill";
 import ItemCard from "./components/ItemCard";
+import Jams from "./Jams";
 
 const CATEGORY_OPTIONS = [
     { slug: "tools", label: "Tools" },
@@ -54,21 +55,28 @@ const SOLO_TAGS = [
   "cairn",
   "into-the-odd",
   "fist",
+  "pirate-borg",
+  "brindlewood",
+  "carved-from-brindlewood",
+  "electric-bastionland",
+  "cain",
+  "trophy-dark",
+  "public-access",
 ];
 
 const SYSTEM_DEFINITIONS = [
     { key: "liminal-horror", label: "Liminal Horror", tags: ["liminal-horror"] },
-    { key: "brindlewood", label: "Brindlewood Bay", tags: ["carved-from-brindlewood", "brindlewood"] },
     { key: "mothership", label: "Mothership", tags: ["mothership", "mothership-rpg", "panic-engine"] },
-    { key: "mork-borg", label: "Mork Borg", tags: ["mork-borg"] },
+    { key: "mork-borg", label: "Mork Borg", tags: ["mork-borg", "pirate-borg"] },
     { key: "delta-green", label: "Delta Green", tags: ["delta-green"] },
     { key: "call-of-cthulhu", label: "Call of Cthulhu", tags: ["call-of-cthulhu"] },
     { key: "triangle-agency", label: "Triangle Agency", tags: ["triangle-agency"] },
     { key: "mausritter", label: "Mausritter", tags: ["mausritter"] },
     { key: "cairn", label: "Cairn", tags: ["cairn"] },
     { key: "into-the-odd", label: "Into the Odd", tags: ["into-the-odd"] },
-    { key: "electric-bastionland", label: "Electric Bastionland", tags: ["electric-bastionland"] },
     { key: "fist", label: "FIST", tags: ["fist"] },
+    { key: "brindlewood", label: "Brindlewood", tags: ["brindlewood", "carved-from-brindlewood"] },
+    { key: "electric-bastionland", label: "Electric Bastionland", tags: ["electric-bastionland"] },
     { key: "cain", label: "CAIN", tags: ["cain"] },
     { key: "trophy-dark", label: "Trophy Dark", tags: ["trophy-dark"] },
     { key: "public-access", label: "Public Access", tags: ["public-access"] },
@@ -77,7 +85,7 @@ const SYSTEM_DEFINITIONS = [
 const SYSTEM_TAGS = SYSTEM_DEFINITIONS.map((system) => system.key);
 const SYSTEM_FILTERS = SYSTEM_DEFINITIONS.map(({ key, label }) => ({ key, label }));
 
-const HIDDEN_ALIAS_TAGS = ["mothership-rpg", "panic-engine"];
+const HIDDEN_ALIAS_TAGS = ["mothership-rpg", "panic-engine", "carved-from-brindlewood"];
 
 const ALL_TAGS = [...new Set([...PAIR_TAGS, ...SOLO_TAGS])];
 const NON_SYSTEM_TAGS = ALL_TAGS.filter(
@@ -89,6 +97,7 @@ const STORAGE_KEYS = {
     system: "itch-feed:selected-system",
     tags: "itch-feed:selected-tags",
     hideNonEnglish: "itch-feed:hide-non-english",
+    hideAiAssisted: "itch-feed:hide-ai-assisted",
     readingMode: "itch-feed:reading-mode",
     hiddenUrls: "itch-feed:hidden-urls",
     blockedAuthors: "itch-feed:blocked-authors",
@@ -99,6 +108,8 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://itch-ttrpg-discov
 const SYSTEM_TAGS_BY_KEY = Object.fromEntries(
     SYSTEM_DEFINITIONS.map((system) => [system.key, system.tags])
 );
+
+const VIP_AUTHORS = ["goblinarchives", "tombloom", "massif-press", "claymorerpgs"];
 
 function loadStoredArray(key, fallback, allowedValues) {
     if (typeof window === "undefined") return fallback;
@@ -264,6 +275,7 @@ const BUCKET_META = {
 const BUCKET_ORDER = ["last-30", "last-365", "over-365"];
 
 export default function App() {
+    const [activePage, setActivePage] = useState("discover");
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -285,6 +297,7 @@ export default function App() {
     const [isDesktopTools, setIsDesktopTools] = useState(false);
     const [showBeyondYear, setShowBeyondYear] = useState(false);
     const [hideNonEnglish, setHideNonEnglish] = useState(() => loadStoredBool(STORAGE_KEYS.hideNonEnglish, true));
+    const [hideAiAssisted, setHideAiAssisted] = useState(() => loadStoredBool(STORAGE_KEYS.hideAiAssisted, true));
     const [readingMode, setReadingMode] = useState(() => loadStoredBool(STORAGE_KEYS.readingMode, true));
 
     const availableSystems = useMemo(() => {
@@ -352,6 +365,11 @@ export default function App() {
         if (typeof window === "undefined") return;
         window.localStorage.setItem(STORAGE_KEYS.hideNonEnglish, JSON.stringify(hideNonEnglish));
     }, [hideNonEnglish]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        window.localStorage.setItem(STORAGE_KEYS.hideAiAssisted, JSON.stringify(hideAiAssisted));
+    }, [hideAiAssisted]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -445,6 +463,8 @@ export default function App() {
 
             if (hideNonEnglish && item.language != null) return false;
 
+            if (hideAiAssisted && item.ai === "ai assisted") return false;
+
             if (hiddenUrlSet.has(item.url)) return false;
 
             const authorKey = normalizeAuthorKey(item.author);
@@ -460,7 +480,7 @@ export default function App() {
             if (selectedTags.length === 0) return true;
             return selectedTags.some((tag) => tags.has(tag));
         });
-    }, [items, selectedCategory, selectedSystem, selectedTags, hiddenUrlSet, blockedAuthorSet, hideNonEnglish]);
+    }, [items, selectedCategory, selectedSystem, selectedTags, hiddenUrlSet, blockedAuthorSet, hideNonEnglish, hideAiAssisted]);
 
     function runItemAction(item, mode) {
         const animationType = mode === "block-author" ? "cut" : "stamp";
@@ -554,28 +574,40 @@ export default function App() {
         setShowBeyondYear(false);
     }, [selectedCategory, selectedSystem, selectedTags, search]);
 
+    if (activePage === "jams") {
+        return <Jams onBack={() => setActivePage("discover")} />;
+    }
+
     return (
         <main
             className={[
-                "min-h-screen bg-[radial-gradient(circle_at_15%_0%,rgba(249,115,22,.2),transparent_45%),radial-gradient(circle_at_90%_20%,rgba(14,165,233,.18),transparent_40%),linear-gradient(180deg,#020617_0%,#0f172a_100%)] px-4 pb-14 pt-8 text-slate-100 md:px-8",
+                "min-h-screen bg-[radial-gradient(circle_at_15%_0%,rgba(249,115,22,.2),transparent_45%),radial-gradient(circle_at_90%_20%,rgba(14,165,233,.18),transparent_40%),linear-gradient(180deg,#020617_0%,#0f172a_100%)] px-4 pb-14 pt-2 text-slate-100 md:px-8",
                 isDesktopTools && interactionMode === "block-author" ? "tool-mode-block" : "",
                 isDesktopTools && interactionMode === "hide-item" ? "tool-mode-stamp" : "",
             ].join(" ")}
         >
             <section className="mx-auto w-full max-w-7xl">
-
                 <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-2 backdrop-blur-sm md:p-5">
-                    <div className="mt-5">
+                    <div className="mt-0">
                         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Category</p>
-                        <div className="flex flex-wrap gap-2">
-                            {CATEGORY_OPTIONS.map((category) => (
-                                <FilterPill
-                                    key={category.slug}
-                                    label={category.label}
-                                    active={selectedCategory === category.slug}
-                                    onClick={() => setSelectedCategory(category.slug)}
-                                />
-                            ))}
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap gap-2">
+                                {CATEGORY_OPTIONS.map((category) => (
+                                    <FilterPill
+                                        key={category.slug}
+                                        label={category.label}
+                                        active={selectedCategory === category.slug}
+                                        onClick={() => setSelectedCategory(category.slug)}
+                                    />
+                                ))}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setActivePage("jams")}
+                                className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-cyan-200/40 bg-cyan-300/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-cyan-100 transition hover:border-cyan-200/70"
+                            >
+                                Browse Jams
+                            </button>
                         </div>
                     </div>
 
@@ -593,10 +625,10 @@ export default function App() {
                         </div>
                     </div>
 
-                    <div className="mt-5 border-t border-white/10 pt-4">
+                    <div className="pt-4">
                         <button
                             type="button"
-                            className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-200 transition hover:border-white/20"
+                            className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-200 transition hover:border-white/20"
                             aria-expanded={isAdvancedOpen}
                             aria-controls="advanced-filters"
                             onClick={() => setIsAdvancedOpen((prev) => !prev)}
@@ -664,6 +696,16 @@ export default function App() {
                                     className="h-4 w-4 accent-amber-300"
                                 />
                                 <span className="font-semibold uppercase tracking-[0.12em]">Hide languages other than English</span>
+                            </label>
+
+                            <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
+                                <input
+                                    type="checkbox"
+                                    checked={hideAiAssisted}
+                                    onChange={(event) => setHideAiAssisted(event.target.checked)}
+                                    className="h-4 w-4 accent-amber-300"
+                                />
+                                <span className="font-semibold uppercase tracking-[0.12em]">Hide AI Assisted</span>
                             </label>
 
                             {isDesktopTools ? (
@@ -772,7 +814,7 @@ export default function App() {
 
                 {!loading && !error ? (
                     showTimelineLayout ? (
-                        <section className="mt-6 space-y-8">
+                        <section className="mt-1 space-y-8">
                             {groupedBuckets.map((group) => (
                                 <section key={group.key}>
                                     <div className="mb-4">
@@ -806,6 +848,7 @@ export default function App() {
                                                         <ItemCard
                                                             key={item.url}
                                                             item={item}
+                                                            isVipAuthor={VIP_AUTHORS.includes(normalizeAuthorKey(item.author))}
                                                             readingMode={readingMode}
                                                             interactionMode={isDesktopTools ? interactionMode : "none"}
                                                             onToolAction={handleItemToolAction}
@@ -822,6 +865,7 @@ export default function App() {
                                                 <ItemCard
                                                     key={item.url}
                                                     item={item}
+                                                    isVipAuthor={VIP_AUTHORS.includes(normalizeAuthorKey(item.author))}
                                                     readingMode={readingMode}
                                                     interactionMode={isDesktopTools ? interactionMode : "none"}
                                                     onToolAction={handleItemToolAction}
@@ -859,6 +903,7 @@ export default function App() {
                                             <ItemCard
                                                 key={item.url}
                                                 item={item}
+                                                isVipAuthor={VIP_AUTHORS.includes(normalizeAuthorKey(item.author))}
                                                 readingMode={readingMode}
                                                 interactionMode={isDesktopTools ? interactionMode : "none"}
                                                 onToolAction={handleItemToolAction}
@@ -876,6 +921,7 @@ export default function App() {
                                         <ItemCard
                                             key={item.url}
                                             item={item}
+                                            isVipAuthor={VIP_AUTHORS.includes(normalizeAuthorKey(item.author))}
                                             readingMode={readingMode}
                                             interactionMode={isDesktopTools ? interactionMode : "none"}
                                             onToolAction={handleItemToolAction}

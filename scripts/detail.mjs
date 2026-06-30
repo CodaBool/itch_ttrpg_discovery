@@ -126,12 +126,13 @@ async function scrapeDetail(page, url) {
     const commentCount = comments ? comments.querySelectorAll(":scope > div").length : 0;
 
     const noAiAnchor = document.querySelector('a[href="https://itch.io/physical-games/tag-no-ai"]');
+    const aiAssistedAnchor = document.querySelector('a[href="https://itch.io/game-assets/ai-assisted"]');
 
     return {
       ratingTooltip,
       topicCount,
       commentCount,
-      ai: noAiAnchor ? "no ai" : null,
+      ai: aiAssistedAnchor ? "ai assisted" : noAiAnchor ? "no ai" : null,
     };
   });
 }

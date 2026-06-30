@@ -77,8 +77,32 @@ function parseEngagementMetric(rawEngagement) {
   return Math.max(0, Math.floor(value));
 }
 
+function showMetricTooltip(event, text) {
+  if (!text || typeof document === "undefined") return;
+  let tooltip = document.querySelector("#metric-tooltip-global");
+  if (!tooltip) {
+    tooltip = document.createElement("div");
+    tooltip.id = "metric-tooltip-global";
+    tooltip.className = "pointer-events-none fixed z-[9999] rounded-xl border border-white/30 bg-slate-900 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-100 shadow-[0_12px_28px_-12px_rgba(0,0,0,0.85)]";
+    tooltip.style.display = "none";
+    document.body.appendChild(tooltip);
+  }
+
+  tooltip.textContent = text;
+  tooltip.style.left = `${event.clientX + 12}px`;
+  tooltip.style.top = `${event.clientY - 12}px`;
+  tooltip.style.display = "block";
+}
+
+function hideMetricTooltip() {
+  if (typeof document === "undefined") return;
+  const tooltip = document.querySelector("#metric-tooltip-global");
+  if (tooltip) tooltip.style.display = "none";
+}
+
 export default function ItemCard({
   item,
+  isVipAuthor = false,
   readingMode = false,
   interactionMode = "none",
   onToolAction,
@@ -225,7 +249,12 @@ export default function ItemCard({
           <span className={hoverRevealClass}>{formatDate(item.publish_date)}</span>
           <div className="flex items-center gap-4">
             {showRatingStar ? (
-              <span className="group/metric relative inline-flex h-4 w-4 items-center justify-center">
+              <span
+                className="group/metric relative inline-flex h-4 w-4 items-center justify-center"
+                onMouseEnter={(event) => showMetricTooltip(event, ratingTooltip)}
+                onMouseMove={(event) => showMetricTooltip(event, ratingTooltip)}
+                onMouseLeave={hideMetricTooltip}
+              >
                 <span className="pointer-events-none absolute right-full top-1/2 mr-px -translate-x-0.5 -translate-y-1/2 text-[11px] font-semibold text-red-300 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100">
                   {ratingCount}
                 </span>
@@ -243,13 +272,15 @@ export default function ItemCard({
                     />
                   </svg>
                 </span>
-                <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-max -translate-x-1/2 rounded-xl border border-white/30 bg-slate-900 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-100 shadow-[0_12px_28px_-12px_rgba(0,0,0,0.85)] opacity-0 transition group-hover/metric:opacity-100">
-                  {ratingTooltip}
-                </span>
               </span>
             ) : null}
             {showEngagementFire ? (
-              <span className="group/metric relative inline-flex h-4 w-4 items-center justify-center">
+              <span
+                className="group/metric relative inline-flex h-4 w-4 items-center justify-center"
+                onMouseEnter={(event) => showMetricTooltip(event, engagementTooltip)}
+                onMouseMove={(event) => showMetricTooltip(event, engagementTooltip)}
+                onMouseLeave={hideMetricTooltip}
+              >
                 <span className="pointer-events-none absolute right-full top-1/2 mr-px -translate-x-0.5 -translate-y-1/2 text-[11px] font-semibold text-amber-300 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100">
                   {engagementMetric}
                 </span>
@@ -274,9 +305,6 @@ export default function ItemCard({
                     </g>
                   </svg>
                 </span>
-                <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-max -translate-x-1/2 rounded-xl border border-white/30 bg-slate-900 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-100 shadow-[0_12px_28px_-12px_rgba(0,0,0,0.85)] opacity-0 transition group-hover/metric:opacity-100">
-                  {engagementTooltip}
-                </span>
               </span>
             ) : null}
           </div>
@@ -288,8 +316,22 @@ export default function ItemCard({
             rel="noreferrer"
             onClick={(event) => event.stopPropagation()}
             onAuxClick={(event) => event.stopPropagation()}
-            className={`min-w-0 max-w-[45%] truncate inline-flex items-center justify-center rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 transition hover:border-white/40 ${hoverRevealClass}`}
+            className={`min-w-0 max-w-[45%] truncate inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 transition hover:border-white/40 ${hoverRevealClass}`}
           >
+            {isVipAuthor ? (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                xmlSpace="preserve"
+                viewBox="0 0 220 220"
+                className="h-3.5 w-3.5 shrink-0 text-amber-300"
+                aria-hidden="true"
+              >
+                <path
+                  fill="currentColor"
+                  d="M220 99a23 23 0 1 0-40 15l-24 22-31-63 18-21-33-39-33 39 17 20-30 64-24-22q6-6 6-15a23 23 0 1 0-26 23l7 85h166l7-85q18-4 20-23"
+                />
+              </svg>
+            ) : null}
             {formatAuthorName(item.author)}
           </a>
         ) : (

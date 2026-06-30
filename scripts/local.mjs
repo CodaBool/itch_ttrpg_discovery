@@ -1,34 +1,15 @@
 import puppeteer from "puppeteer";
 import { XMLParser } from "fast-xml-parser";
+import { franc } from "franc";
 
-const LANGUAGE_STOPWORDS = {
-  es: [" el ", " la ", " los ", " las ", " de ", "del", " adventura ", " minimalista ", " spanish ", " y ", " en ", " un ", " una ", " para ", " gratuita ", " con ", " por "],
-  fr: [" le ", " la ", " les ", " des ", " de ", " et ", " en ", " un ", " une ", " pour ", " avec ", " sur "],
-  de: [" der ", " die ", " das ", " und ", " ist ", " nicht ", " ein ", " eine ", " mit ", " auf ", " für "],
-  pt: [" o ", " a ", " os ", " as ", " de ", " e ", " em ", " um ", " uma ", " para ", " com ", " não "],
-  it: [" il ", " lo ", " la ", " gli ", " le ", " di ", " e ", " un ", " una ", " per ", " con ", " che "],
-  nl: [" de ", " het ", " een ", " en ", " van ", " voor ", " met ", " op ", " is ", " niet ", " dit ", " dat "],
-  pl: [" i ", " w ", " na ", " nie ", " się ", " jest ", " oraz ", " dla ", " z ", " do ", " gry ", " polski "],
-  ru: [" и ", " в ", " на ", " не ", " что ", " для ", " это ", " как ", " по ", " из ", " русский ", " игра "],
-  ja: [" の ", " に ", " を ", " と ", " です ", " する ", " ます ", " で ", " から ", " 日本語 "],
-  ko: [" 이 ", " 가 ", " 을 ", " 를 ", " 은 ", " 는 ", " 에 ", " 에서 ", " 한국어 ", " 게임 "],
-  zh: [" 的 ", " 了 ", " 在 ", " 是 ", " 和 ", " 游戏 ", " 这 ", " 中文 ", " 简体 ", " 繁體 "],
-};
-
-const SCRIPT_LANGUAGE_RULES = [
-  { code: "ja", regex: /[\u3040-\u30ff]/u },
-  { code: "ko", regex: /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/u },
-  { code: "ru", regex: /[\u0400-\u04ff]/u },
-  { code: "zh", regex: /[\u3400-\u9fff\uf900-\ufaff]/u },
-];
-
-// Keep in sync with worker/src/index.js PAIR_TAGS.
+// Keep in sync with worker/src/index.js
 const PAIR_TAGS = [
   "horror",
   "body-horror",
   "generation",
   "generated",
   "generator",
+  "analog-horror",
   "tool",
   "mystery",
   "investigation",
@@ -37,7 +18,9 @@ const PAIR_TAGS = [
   "pbta",
   "forged-in-the-dark",
   "sci-fi",
+  "tabletop",
 ];
+
 const SOLO_TAGS = [
   "zine",
   "one-page",
@@ -45,7 +28,6 @@ const SOLO_TAGS = [
   "rules-lite",
   "rules-light",
   "supplement",
-  "tabletop",
   "fanzine",
   "micro-rpg",
   "ttrpg",
@@ -62,6 +44,13 @@ const SOLO_TAGS = [
   "cairn",
   "into-the-odd",
   "fist",
+  "pirate-borg",
+  "brindlewood",
+  "carved-from-brindlewood",
+  "electric-bastionland",
+  "cain",
+  "trophy-dark",
+  "public-access",
 ];
 
 const CATEGORIES = [
@@ -158,27 +147,12 @@ function detectItemLanguage(item) {
   const raw = toLanguageText(item);
   if (!raw) return null;
 
-  const padded = ` ${raw.toLowerCase()} `;
-
-  for (const rule of SCRIPT_LANGUAGE_RULES) {
-    if (rule.regex.test(raw)) return rule.code;
+  const detectedIso3 = franc(raw, { minLength: 20 });
+  if (!detectedIso3 || detectedIso3 === "und" || detectedIso3 === "eng") {
+    return null;
   }
 
-  let best = { code: null, score: 0 };
-
-  for (const [code, words] of Object.entries(LANGUAGE_STOPWORDS)) {
-    let score = 0;
-    for (const word of words) {
-      if (padded.includes(word)) score += 1;
-    }
-
-    if (score > best.score) {
-      best = { code, score };
-    }
-  }
-
-  if (!best.code || best.score < 3) return null;
-  return best.code;
+  return detectedIso3;
 }
 
 function normalizeSource(source) {

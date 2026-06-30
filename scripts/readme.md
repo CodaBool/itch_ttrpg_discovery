@@ -3,6 +3,7 @@
 
 1. start chrome with a persistent profile directory (keeps your itch login cookie across runs):
 	`flatpak run com.google.Chrome --remote-debugging-port=9222 --user-data-dir=$HOME/.config/itch-rpg-feed/chrome-cdp`
+	a. Windows: `"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="C:\ChromeDebug"`
 2. login to itch in the browser
 3. run script `npm run local`
 

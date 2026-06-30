@@ -6,10 +6,10 @@ import { franc } from "franc";
 const PAIR_TAGS = [
   "horror",
   "body-horror",
-  "generation",
-  "generated",
+  // "generation",
+  // "generated",
   "generator",
-  "analog-horror",
+  // "analog-horror",
   "tool",
   "mystery",
   "investigation",
@@ -23,6 +23,7 @@ const PAIR_TAGS = [
   "zine",
   "fanzine",
   "supplement",
+  "cyborg",
 ];
 
 const SOLO_TAGS = [
@@ -49,7 +50,6 @@ const SOLO_TAGS = [
   "carved-from-brindlewood",
   "electric-bastionland",
   "cain",
-  "cyborg",
   "trophy-dark",
   "public-access",
 ];

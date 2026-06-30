@@ -20,10 +20,10 @@ const CATEGORY_ALIAS_BY_SLUG = {
 const PAIR_TAGS = [
   "horror",
   "body-horror",
-  "generation",
-  "generated",
+//   "generation",
+//   "generated",
   "generator",
-  "analog-horror",
+//   "analog-horror",
   "tool",
   "mystery",
   "investigation",
@@ -37,6 +37,7 @@ const PAIR_TAGS = [
   "zine",
   "fanzine",
   "supplement",
+  "cyborg",
 ];
 
 const SOLO_TAGS = [
@@ -63,7 +64,6 @@ const SOLO_TAGS = [
   "carved-from-brindlewood",
   "electric-bastionland",
   "cain",
-  "cyborg",
   "trophy-dark",
   "public-access",
 ];
@@ -733,7 +733,7 @@ export default function App() {
                                 />
                             </div>
 
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Tags</p>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Tags - <span className="lowercase">if any tag is found from the selected tags below, the result is shown (in other words deselection does not exclude)</span></p>
                             <div className="flex flex-wrap gap-2">
                                 {NON_SYSTEM_TAGS.map((tag) => (
                                     <FilterPill

@@ -100,6 +100,21 @@ function parseRatingFromTooltip(tooltip) {
   return `${average}over${totalRatings}`;
 }
 
+function shouldRemoveForLowRating(rawRating) {
+  const value = String(rawRating || "").trim();
+  if (!value) return false;
+
+  const parts = value.split("over");
+  if (parts.length !== 2) return false;
+
+  const average = Number(parts[0]);
+  const totalRatings = Number(parts[1]);
+  if (!Number.isFinite(average) || !Number.isFinite(totalRatings)) return false;
+
+  // Treat 1-star average with at least 2 reviews as a remove signal.
+  return average === 1 && totalRatings >= 2;
+}
+
 async function scrapeDetail(page, url) {
   const response = await page.goto(url, {
     waitUntil: "domcontentloaded",
@@ -265,6 +280,7 @@ async function main() {
   const counters = {
     seen: 0,
     updated: 0,
+    removedLowRating: 0,
     failed: 0,
     skipped: 0,
     removed404: 0,
@@ -297,6 +313,24 @@ async function main() {
           const rating = parseRatingFromTooltip(scraped.ratingTooltip);
           const engagement = Number(scraped.topicCount || 0) + Number(scraped.commentCount || 0);
           const ai = scraped.ai || null;
+
+          if (shouldRemoveForLowRating(rating)) {
+            if (!dryRun) {
+              await d1.query("DELETE FROM items WHERE url = ?", [url]);
+            }
+
+            counters.removedLowRating += 1;
+            console.log(
+              `[worker-${workerId}] removed ${url} due to low rating signal (${rating})`
+            );
+            counters.seen += 1;
+
+            if (cooldownMs > 0) {
+              await sleep(cooldownMs);
+            }
+
+            continue;
+          }
 
           if (!dryRun) {
             await d1.query(
@@ -371,6 +405,7 @@ async function main() {
   console.log("\n=== Detail Summary ===");
   console.log(`Rows seen: ${counters.seen}`);
   console.log(`Rows updated: ${counters.updated}`);
+  console.log(`Rows removed due to low rating: ${dryRun ? 0 : counters.removedLowRating}`);
   console.log(`Rows failed: ${counters.failed}`);
   console.log(`Rows skipped (no url): ${counters.skipped}`);
   console.log(`Rows removed due to 404: ${dryRun ? 0 : counters.removed404}`);

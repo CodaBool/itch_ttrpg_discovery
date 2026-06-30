@@ -20,4 +20,4 @@ mostly ai slop
 - pathfinder
 - Print & Play
 - storygame
-- N< Word RPG
+- X < Word RPG

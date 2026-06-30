@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import FilterPill from "./components/FilterPill";
 import ItemCard from "./components/ItemCard";
 import Jams from "./Jams";
+import { banAuthor, banUrl, createAdminClientFromEnv, isAdminEnabled } from "./admin";
+
+
 
 const CATEGORY_OPTIONS = [
     { slug: "tools", label: "Tools" },
@@ -30,16 +33,16 @@ const PAIR_TAGS = [
   "forged-in-the-dark",
   "sci-fi",
   "tabletop",
+  "one-page",
+  "zine",
+  "fanzine",
+  "supplement",
 ];
 
 const SOLO_TAGS = [
-  "zine",
-  "one-page",
   "one-shot",
   "rules-lite",
   "rules-light",
-  "supplement",
-  "fanzine",
   "micro-rpg",
   "ttrpg",
   "osr",
@@ -60,6 +63,7 @@ const SOLO_TAGS = [
   "carved-from-brindlewood",
   "electric-bastionland",
   "cain",
+  "cyborg",
   "trophy-dark",
   "public-access",
 ];
@@ -67,7 +71,7 @@ const SOLO_TAGS = [
 const SYSTEM_DEFINITIONS = [
     { key: "liminal-horror", label: "Liminal Horror", tags: ["liminal-horror"] },
     { key: "mothership", label: "Mothership", tags: ["mothership", "mothership-rpg", "panic-engine"] },
-    { key: "mork-borg", label: "Mork Borg", tags: ["mork-borg", "pirate-borg"] },
+    { key: "mork-borg", label: "Mork Borg", tags: ["mork-borg", "pirate-borg", "cyborg"] },
     { key: "delta-green", label: "Delta Green", tags: ["delta-green"] },
     { key: "call-of-cthulhu", label: "Call of Cthulhu", tags: ["call-of-cthulhu"] },
     { key: "triangle-agency", label: "Triangle Agency", tags: ["triangle-agency"] },
@@ -85,7 +89,7 @@ const SYSTEM_DEFINITIONS = [
 const SYSTEM_TAGS = SYSTEM_DEFINITIONS.map((system) => system.key);
 const SYSTEM_FILTERS = SYSTEM_DEFINITIONS.map(({ key, label }) => ({ key, label }));
 
-const HIDDEN_ALIAS_TAGS = ["mothership-rpg", "panic-engine", "carved-from-brindlewood"];
+const HIDDEN_ALIAS_TAGS = ["mothership-rpg", "panic-engine", "carved-from-brindlewood", "pirate-borg", "cyborg"];
 
 const ALL_TAGS = [...new Set([...PAIR_TAGS, ...SOLO_TAGS])];
 const NON_SYSTEM_TAGS = ALL_TAGS.filter(
@@ -98,6 +102,7 @@ const STORAGE_KEYS = {
     tags: "itch-feed:selected-tags",
     hideNonEnglish: "itch-feed:hide-non-english",
     hideAiAssisted: "itch-feed:hide-ai-assisted",
+    minRatings: "itch-feed:min-ratings",
     readingMode: "itch-feed:reading-mode",
     hiddenUrls: "itch-feed:hidden-urls",
     blockedAuthors: "itch-feed:blocked-authors",
@@ -199,6 +204,21 @@ function loadStoredBool(key, fallback = false) {
     }
 }
 
+function loadStoredNumber(key, fallback = 0, min = 0, max = Number.POSITIVE_INFINITY) {
+    if (typeof window === "undefined") return fallback;
+
+    try {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return fallback;
+        const parsed = JSON.parse(raw);
+        const value = Number(parsed);
+        if (!Number.isFinite(value)) return fallback;
+        return Math.min(max, Math.max(min, Math.floor(value)));
+    } catch {
+        return fallback;
+    }
+}
+
 function toggleValue(list, value) {
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
@@ -249,6 +269,18 @@ function parseItemDate(item) {
     return parsed;
 }
 
+function parseRatingCount(item) {
+    const raw = String(item?.rating || "").trim();
+    if (!raw) return 0;
+
+    const parts = raw.split("over");
+    if (parts.length !== 2) return 0;
+
+    const count = Number(parts[1]);
+    if (!Number.isFinite(count)) return 0;
+    return Math.max(0, Math.floor(count));
+}
+
 function normalizeAuthorKey(author) {
     return String(author || "").trim().toLowerCase();
 }
@@ -275,6 +307,7 @@ const BUCKET_META = {
 const BUCKET_ORDER = ["last-30", "last-365", "over-365"];
 
 export default function App() {
+    const hasAdminToken = isAdminEnabled();
     const [activePage, setActivePage] = useState("discover");
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -298,6 +331,7 @@ export default function App() {
     const [showBeyondYear, setShowBeyondYear] = useState(false);
     const [hideNonEnglish, setHideNonEnglish] = useState(() => loadStoredBool(STORAGE_KEYS.hideNonEnglish, true));
     const [hideAiAssisted, setHideAiAssisted] = useState(() => loadStoredBool(STORAGE_KEYS.hideAiAssisted, true));
+    const [minRatings, setMinRatings] = useState(() => loadStoredNumber(STORAGE_KEYS.minRatings, 0, 0, 10));
     const [readingMode, setReadingMode] = useState(() => loadStoredBool(STORAGE_KEYS.readingMode, true));
 
     const availableSystems = useMemo(() => {
@@ -370,6 +404,11 @@ export default function App() {
         if (typeof window === "undefined") return;
         window.localStorage.setItem(STORAGE_KEYS.hideAiAssisted, JSON.stringify(hideAiAssisted));
     }, [hideAiAssisted]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        window.localStorage.setItem(STORAGE_KEYS.minRatings, JSON.stringify(minRatings));
+    }, [minRatings]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -465,6 +504,8 @@ export default function App() {
 
             if (hideAiAssisted && item.ai === "ai assisted") return false;
 
+            if (parseRatingCount(item) < minRatings) return false;
+
             if (hiddenUrlSet.has(item.url)) return false;
 
             const authorKey = normalizeAuthorKey(item.author);
@@ -480,7 +521,7 @@ export default function App() {
             if (selectedTags.length === 0) return true;
             return selectedTags.some((tag) => tags.has(tag));
         });
-    }, [items, selectedCategory, selectedSystem, selectedTags, hiddenUrlSet, blockedAuthorSet, hideNonEnglish, hideAiAssisted]);
+    }, [items, selectedCategory, selectedSystem, selectedTags, hiddenUrlSet, blockedAuthorSet, hideNonEnglish, hideAiAssisted, minRatings]);
 
     function runItemAction(item, mode) {
         const animationType = mode === "block-author" ? "cut" : "stamp";
@@ -521,6 +562,34 @@ export default function App() {
             if (!authorKey) return;
             runItemAction(item, "block-author");
         }
+
+        if (interactionMode === "ban" && hasAdminToken) {
+            (async () => {
+                try {
+                    const client = createAdminClientFromEnv();
+                    await banUrl(client, item.url, "Banned from UI", "local-ui");
+                    setHiddenUrls((prev) => (prev.includes(item.url) ? prev : [...prev, item.url]));
+                } catch (err) {
+                    setError(err?.message || "Failed to ban item.");
+                }
+            })();
+        }
+    }
+
+    function handleAuthorToolAction(item) {
+        if (!isDesktopTools || interactionMode !== "ban" || !hasAdminToken) return;
+        const authorKey = normalizeAuthorKey(item.author);
+        if (!authorKey) return;
+
+        (async () => {
+            try {
+                const client = createAdminClientFromEnv();
+                await banAuthor(client, authorKey, "Banned from UI", "local-ui");
+                setBlockedAuthors((prev) => (prev.includes(authorKey) ? prev : [...prev, authorKey]));
+            } catch (err) {
+                setError(err?.message || "Failed to ban author.");
+            }
+        })();
     }
 
     function clearHidden() {
@@ -708,34 +777,50 @@ export default function App() {
                                 <span className="font-semibold uppercase tracking-[0.12em]">Hide AI Assisted</span>
                             </label>
 
-                            {isDesktopTools ? (
-                                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Seen Items</p>
-                                    <div className="flex items-center justify-between gap-3 text-xs text-slate-200">
-                                        <span>{hiddenUrls.length} hidden</span>
-                                        <button
-                                            type="button"
-                                            onClick={clearHidden}
-                                            className="rounded border border-white/20 px-2 py-1 uppercase tracking-[0.12em] text-slate-200 hover:border-white/40"
-                                        >
-                                            clear
-                                        </button>
-                                    </div>
+                            <label className="block rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                    <span className="font-semibold uppercase tracking-[0.12em]">Minimum number of ratings</span>
+                                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-200">{minRatings}</span>
                                 </div>
-                            ) : null}
+                                <input
+                                    type="range"
+                                    min={0}
+                                    max={10}
+                                    step={1}
+                                    value={minRatings}
+                                    onChange={(event) => setMinRatings(Number(event.target.value) || 0)}
+                                    className="w-full accent-amber-300"
+                                />
+                            </label>
 
                             {isDesktopTools ? (
-                                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Blocked Creators</p>
-                                    <div className="flex items-center justify-between gap-3 text-xs text-slate-200">
-                                        <span>{blockedAuthors.length} blocked</span>
-                                        <button
-                                            type="button"
-                                            onClick={clearBlockedAuthors}
-                                            className="rounded border border-white/20 px-2 py-1 uppercase tracking-[0.12em] text-slate-200 hover:border-white/40"
-                                        >
-                                            clear
-                                        </button>
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Seen Items</p>
+                                        <div className="flex items-center justify-between gap-3 text-xs text-slate-200">
+                                            <span>{hiddenUrls.length} hidden</span>
+                                            <button
+                                                type="button"
+                                                onClick={clearHidden}
+                                                className="rounded border border-white/20 px-2 py-1 uppercase tracking-[0.12em] text-slate-200 hover:border-white/40"
+                                            >
+                                                clear
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Blocked Creators</p>
+                                        <div className="flex items-center justify-between gap-3 text-xs text-slate-200">
+                                            <span>{blockedAuthors.length} blocked</span>
+                                            <button
+                                                type="button"
+                                                onClick={clearBlockedAuthors}
+                                                className="rounded border border-white/20 px-2 py-1 uppercase tracking-[0.12em] text-slate-200 hover:border-white/40"
+                                            >
+                                                clear
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             ) : null}
@@ -765,6 +850,29 @@ export default function App() {
 
                 {isDesktopTools ? (
                     <div className="fixed left-[min(calc((100vw+80rem)/2+1rem),calc(100vw-5.5rem))] top-1/2 z-50 flex -translate-y-1/2 flex-col gap-3">
+                        {hasAdminToken ? (
+                            <div className="group relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setInteractionMode((prev) => (prev === "ban" ? "none" : "ban"))}
+                                    className={[
+                                        "flex h-14 w-14 items-center justify-center rounded-xl border p-2 shadow-[0_12px_24px_-14px_rgba(0,0,0,0.85)] backdrop-blur-sm transition",
+                                        interactionMode === "ban"
+                                            ? "border-red-300/80 bg-red-300/20"
+                                            : "border-white/20 bg-slate-950/70 hover:border-red-200/50",
+                                    ].join(" ")}
+                                    aria-label="ban this item or author"
+                                >
+                                    {interactionMode === "ban" ? null : (
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="red" viewBox="0 0 512 512" className="h-8 w-8" aria-hidden="true"><path d="M242 1q-44 3-86 20A260 260 0 0 0 7 312q15 72 68 124A256 256 0 1 0 241 1m49 78q28 6 54 20l9 5-125 125-124 125-3-4c-5-8-14-28-17-39-7-21-8-29-8-54 0-21 0-25 2-35q10-54 48-91 42-43 97-52l12-2a304 304 0 0 1 55 2m127 99q11 20 15 44c2 9 2 14 2 34 1 25-1 35-7 55a181 181 0 0 1-262 101l-8-5 125-124 125-125 2 4z"/></svg>
+                                    )}
+                                </button>
+                                <span className="pointer-events-none absolute right-full top-1/2 mr-3 w-64 -translate-y-1/2 rounded-xl border border-white/30 bg-slate-900 px-4 py-3 text-sm font-semibold uppercase leading-snug tracking-[0.12em] text-slate-100 shadow-[0_12px_28px_-12px_rgba(0,0,0,0.85)] opacity-0 transition group-hover:opacity-100">
+                                    ban item (card) or creator (name)
+                                </span>
+                            </div>
+                        ) : null}
+
                         <div className="group relative">
                             <button
                                 type="button"
@@ -852,6 +960,7 @@ export default function App() {
                                                             readingMode={readingMode}
                                                             interactionMode={isDesktopTools ? interactionMode : "none"}
                                                             onToolAction={handleItemToolAction}
+                                                            onAuthorToolAction={handleAuthorToolAction}
                                                             actionState={itemActionState[item.url] || "idle"}
                                                             shake={isDesktopTools && interactionMode === "block-author"}
                                                         />
@@ -869,6 +978,7 @@ export default function App() {
                                                     readingMode={readingMode}
                                                     interactionMode={isDesktopTools ? interactionMode : "none"}
                                                     onToolAction={handleItemToolAction}
+                                                    onAuthorToolAction={handleAuthorToolAction}
                                                     actionState={itemActionState[item.url] || "idle"}
                                                     shake={isDesktopTools && interactionMode === "block-author"}
                                                 />
@@ -907,6 +1017,7 @@ export default function App() {
                                                 readingMode={readingMode}
                                                 interactionMode={isDesktopTools ? interactionMode : "none"}
                                                 onToolAction={handleItemToolAction}
+                                                onAuthorToolAction={handleAuthorToolAction}
                                                 actionState={itemActionState[item.url] || "idle"}
                                                 shake={isDesktopTools && interactionMode === "block-author"}
                                             />
@@ -925,6 +1036,7 @@ export default function App() {
                                             readingMode={readingMode}
                                             interactionMode={isDesktopTools ? interactionMode : "none"}
                                             onToolAction={handleItemToolAction}
+                                            onAuthorToolAction={handleAuthorToolAction}
                                             actionState={itemActionState[item.url] || "idle"}
                                             shake={isDesktopTools && interactionMode === "block-author"}
                                         />

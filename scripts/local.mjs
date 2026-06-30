@@ -19,16 +19,16 @@ const PAIR_TAGS = [
   "forged-in-the-dark",
   "sci-fi",
   "tabletop",
+  "one-page",
+  "zine",
+  "fanzine",
+  "supplement",
 ];
 
 const SOLO_TAGS = [
-  "zine",
-  "one-page",
   "one-shot",
   "rules-lite",
   "rules-light",
-  "supplement",
-  "fanzine",
   "micro-rpg",
   "ttrpg",
   "osr",
@@ -49,6 +49,7 @@ const SOLO_TAGS = [
   "carved-from-brindlewood",
   "electric-bastionland",
   "cain",
+  "cyborg",
   "trophy-dark",
   "public-access",
 ];
@@ -306,6 +307,35 @@ class CloudflareD1Client {
     const rows = await this.query(sql, params);
     return rows[0] || null;
   }
+}
+
+function normalizeBanValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function loadIngestionBans(client) {
+  const rows = await client.query("SELECT kind, value FROM ingest_bans");
+  const bannedUrls = new Set();
+  const bannedAuthors = new Set();
+
+  for (const row of rows || []) {
+    const kind = String(row.kind || "").trim().toLowerCase();
+    const value = normalizeBanValue(row.value);
+    if (!value) continue;
+
+    if (kind === "url") bannedUrls.add(value);
+    if (kind === "author") bannedAuthors.add(value);
+  }
+
+  return { bannedUrls, bannedAuthors };
+}
+
+function isItemBanned(item, bans) {
+  const url = normalizeBanValue(item.url);
+  const author = normalizeBanValue(item.author);
+  if (url && bans.bannedUrls.has(url)) return true;
+  if (author && bans.bannedAuthors.has(author)) return true;
+  return false;
 }
 
 async function upsertItem(client, item, source, dryRun) {
@@ -568,6 +598,7 @@ async function main() {
     itemsSeen: 0,
     inserted: 0,
     updated: 0,
+    skippedBanned: 0,
     http403: 0,
     http429: 0,
   };
@@ -589,6 +620,7 @@ async function main() {
   );
 
   const d1 = new CloudflareD1Client({ accountId, databaseId, apiToken });
+  const bans = await loadIngestionBans(d1);
 
   const failures = [];
   const searchesToRetry = [];
@@ -664,6 +696,11 @@ async function main() {
     let searchUpdated = 0;
 
     for (const item of items) {
+      if (isItemBanned(item, bans)) {
+        counters.skippedBanned += 1;
+        continue;
+      }
+
       try {
         const upsert = await upsertItem(d1, item, search, dryRun);
         counters.inserted += upsert.inserted;
@@ -732,6 +769,7 @@ async function main() {
   console.log(`Items seen: ${counters.itemsSeen}`);
   console.log(`Inserted: ${counters.inserted}`);
   console.log(`Updated: ${counters.updated}`);
+  console.log(`Skipped by ban list: ${counters.skippedBanned}`);
   console.log(`HTTP 403 count: ${counters.http403}`);
   console.log(`HTTP 429 count: ${counters.http429}`);
 

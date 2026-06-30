@@ -1,6 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import { franc } from "franc";
 
+// Keep in sync with worker/src/index.js
 const PAIR_TAGS = [
   "horror",
   "body-horror",
@@ -17,16 +18,16 @@ const PAIR_TAGS = [
   "forged-in-the-dark",
   "sci-fi",
   "tabletop",
+  "one-page",
+  "zine",
+  "fanzine",
+  "supplement",
 ];
 
 const SOLO_TAGS = [
-  "zine",
-  "one-page",
   "one-shot",
   "rules-lite",
   "rules-light",
-  "supplement",
-  "fanzine",
   "micro-rpg",
   "ttrpg",
   "osr",
@@ -47,9 +48,11 @@ const SOLO_TAGS = [
   "carved-from-brindlewood",
   "electric-bastionland",
   "cain",
+  "cyborg",
   "trophy-dark",
   "public-access",
 ];
+
 const CATEGORIES = [
   { name: "Assets", slug: "game-assets" },
   { name: "Physical Game", slug: "physical-games" },
@@ -322,6 +325,35 @@ function itemPreview(item) {
   };
 }
 
+function normalizeBanValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function loadIngestionBans(env) {
+  const rows = await env.DB.prepare("SELECT kind, value FROM ingest_bans").all();
+  const bannedUrls = new Set();
+  const bannedAuthors = new Set();
+
+  for (const row of rows.results || []) {
+    const kind = String(row.kind || "").trim().toLowerCase();
+    const value = normalizeBanValue(row.value);
+    if (!value) continue;
+
+    if (kind === "url") bannedUrls.add(value);
+    if (kind === "author") bannedAuthors.add(value);
+  }
+
+  return { bannedUrls, bannedAuthors };
+}
+
+function isItemBanned(item, bans) {
+  const url = normalizeBanValue(item.url);
+  const author = normalizeBanValue(item.author);
+  if (url && bans.bannedUrls.has(url)) return true;
+  if (author && bans.bannedAuthors.has(author)) return true;
+  return false;
+}
+
 async function upsertItem(env, item, source) {
   const existing = await env.DB.prepare("SELECT source, first_seen_at FROM items WHERE url = ?")
     .bind(item.url)
@@ -412,12 +444,14 @@ async function runSingleSearch(env, search, options = {}) {
   const dryRun = toBoolean(options.dryRun, false);
   const includeDebug = toBoolean(options.includeDebug, false);
   const previewItemsPerSearch = toBoundedInt(options.previewItemsPerSearch, 0, 20, 3);
+  const bans = options.bans || await loadIngestionBans(env);
 
   const summary = {
     started_at: new Date().toISOString(),
     dry_run: dryRun,
     processed_search: normalizeSource(search),
     items_seen: 0,
+    skipped_banned: 0,
     inserted: 0,
     updated: 0,
     failures: [],
@@ -456,6 +490,11 @@ async function runSingleSearch(env, search, options = {}) {
 
     if (!dryRun) {
       for (const item of parsedItems) {
+        if (isItemBanned(item, bans)) {
+          summary.skipped_banned += 1;
+          continue;
+        }
+
         const result = await upsertItem(env, item, search);
         summary.inserted += result.inserted;
         summary.updated += result.updated;
@@ -507,7 +546,8 @@ async function runIngestionStep(env, options = {}) {
 
   const search = searches[processedIndex];
 
-  const result = await runSingleSearch(env, search, options);
+  const bans = await loadIngestionBans(env);
+  const result = await runSingleSearch(env, search, { ...options, bans });
 
   if (!scopedRun && nextIndex != null) {
     await writeIngestionCursor(env, nextIndex);
@@ -531,6 +571,7 @@ async function runIngestion(env, options = {}) {
   const dryRun = toBoolean(options.dryRun, false);
   const includeDebug = toBoolean(options.includeDebug, false);
   const previewItemsPerSearch = toBoundedInt(options.previewItemsPerSearch, 0, 20, 3);
+  const bans = await loadIngestionBans(env);
 
   const searches = buildSearches({
     maxSearches,
@@ -547,6 +588,7 @@ async function runIngestion(env, options = {}) {
     searches_succeeded: 0,
     searches_failed: 0,
     items_seen: 0,
+    skipped_banned: 0,
     inserted: 0,
     updated: 0,
     failures: [],
@@ -587,6 +629,11 @@ async function runIngestion(env, options = {}) {
 
       if (!dryRun) {
         for (const item of parsedItems) {
+          if (isItemBanned(item, bans)) {
+            summary.skipped_banned += 1;
+            continue;
+          }
+
           const result = await upsertItem(env, item, search);
           summary.inserted += result.inserted;
           summary.updated += result.updated;
@@ -718,6 +765,53 @@ function listMetadata() {
   });
 }
 
+function isAdminAuthorized(request, env) {
+  const required = String(env.ADMIN_TOKEN || "").trim();
+  if (!required) return true;
+
+  const supplied = String(request.headers.get("x-admin-token") || "").trim();
+  return supplied === required;
+}
+
+async function banEntity(request, env) {
+  if (!isAdminAuthorized(request, env)) {
+    return json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body = null;
+  try {
+    body = await request.json();
+  } catch {
+    body = null;
+  }
+
+  const kind = String(body?.kind || "").trim().toLowerCase();
+  const value = normalizeBanValue(body?.value);
+  const reason = String(body?.reason || "").trim();
+  const createdBy = String(body?.createdBy || "").trim();
+
+  if (!["url", "author"].includes(kind)) {
+    return json({ error: "Invalid kind" }, { status: 400 });
+  }
+
+  if (!value) {
+    return json({ error: "value is required" }, { status: 400 });
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO ingest_bans (kind, value, reason, created_by, created_at)
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(kind, value) DO UPDATE SET
+       reason = excluded.reason,
+       created_by = excluded.created_by,
+       created_at = CURRENT_TIMESTAMP`
+  )
+    .bind(kind, value, reason, createdBy)
+    .run();
+
+  return json({ ok: true, kind, value });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -777,6 +871,10 @@ export default {
       });
       summary.sampled_tags = options.sampled_tags;
       return json(summary);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/admin/ban") {
+      return banEntity(request, env);
     }
 
     return json({ error: "Not found" }, { status: 404 });

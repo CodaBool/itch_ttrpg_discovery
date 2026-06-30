@@ -106,6 +106,7 @@ export default function ItemCard({
   readingMode = false,
   interactionMode = "none",
   onToolAction,
+  onAuthorToolAction,
   actionState = "idle",
   shake = false,
 }) {
@@ -314,8 +315,24 @@ export default function ItemCard({
             href={item.author_url}
             target="_blank"
             rel="noreferrer"
-            onClick={(event) => event.stopPropagation()}
-            onAuxClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              if (toolModeEnabled && interactionMode === "ban") {
+                event.preventDefault();
+                event.stopPropagation();
+                onAuthorToolAction?.(item);
+                return;
+              }
+              event.stopPropagation();
+            }}
+            onAuxClick={(event) => {
+              if (toolModeEnabled && interactionMode === "ban") {
+                event.preventDefault();
+                event.stopPropagation();
+                onAuthorToolAction?.(item);
+                return;
+              }
+              event.stopPropagation();
+            }}
             className={`min-w-0 max-w-[45%] truncate inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 transition hover:border-white/40 ${hoverRevealClass}`}
           >
             {isVipAuthor ? (

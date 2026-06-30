@@ -112,7 +112,9 @@ async function scrapeDetail(page, url) {
 
   const status = response.status();
   if (status < 200 || status >= 300) {
-    throw new Error(`HTTP ${status}`);
+    const err = new Error(`HTTP ${status}`);
+    err.status = status;
+    throw err;
   }
 
   return page.evaluate(() => {
@@ -265,10 +267,12 @@ async function main() {
     updated: 0,
     failed: 0,
     skipped: 0,
+    removed404: 0,
     completedBatches: 0,
   };
 
   const failures = [];
+  const notFoundUrls = new Set();
 
   async function processBatchWithWorker(workerId, batch) {
     let browserSession = null;
@@ -312,6 +316,10 @@ async function main() {
           );
         } catch (error) {
           counters.failed += 1;
+          const is404 = error?.status === 404 || /HTTP\s+404/i.test(String(error?.message || ""));
+          if (is404) {
+            notFoundUrls.add(url);
+          }
           failures.push({ worker: workerId, url, error: error.message });
           console.log(`[worker-${workerId}] failed ${url}: ${error.message}`);
 
@@ -348,11 +356,24 @@ async function main() {
   const activeWorkers = Math.min(workerCount, batches.length);
   await Promise.all(Array.from({ length: activeWorkers }, (_, index) => workerLoop(index + 1)));
 
+  if (notFoundUrls.size > 0) {
+    if (dryRun) {
+      console.log(`[cleanup] dry run: would delete ${notFoundUrls.size} URL(s) that returned HTTP 404`);
+    } else {
+      for (const missingUrl of notFoundUrls) {
+        await d1.query("DELETE FROM items WHERE url = ?", [missingUrl]);
+        counters.removed404 += 1;
+      }
+      console.log(`[cleanup] deleted ${counters.removed404} URL(s) that returned HTTP 404`);
+    }
+  }
+
   console.log("\n=== Detail Summary ===");
   console.log(`Rows seen: ${counters.seen}`);
   console.log(`Rows updated: ${counters.updated}`);
   console.log(`Rows failed: ${counters.failed}`);
   console.log(`Rows skipped (no url): ${counters.skipped}`);
+  console.log(`Rows removed due to 404: ${dryRun ? 0 : counters.removed404}`);
   console.log(`Batches completed: ${counters.completedBatches}/${batches.length}`);
 
   if (failures.length > 0) {

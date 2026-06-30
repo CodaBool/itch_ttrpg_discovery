@@ -16,6 +16,7 @@ mostly ai slop
 - lyric game
 - two player
 - d&d
+- lancer
 - pathfinder
 - Print & Play
 - storygame

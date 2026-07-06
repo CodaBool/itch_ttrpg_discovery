@@ -6,6 +6,8 @@ import {
   toInt,
 } from "./shared.js";
 
+const FETCHES_PER_REQUEST = 5;
+
 function json(data, init = {}) {
   const headers = new Headers(init.headers || {});
   headers.set("content-type", "application/json; charset=utf-8");
@@ -52,12 +54,10 @@ async function fetchAndParseDetail(url, requestTimeoutMs, userAgent) {
     }
 
     const html = await response.text();
-    console.log("response for", url)
+    console.log(url)
 
-    const res = parseDetailFromHtml(html);
-    console.log(res)
+    return parseDetailFromHtml(html);
 
-    return res
   } catch (error) {
     if (error?.name === "AbortError") {
       const timeoutError = new Error(`HTTP timeout after ${requestTimeoutMs}ms`);
@@ -74,13 +74,41 @@ async function runDetailStep(env, options) {
   const db = new WorkerD1Client(env.DB);
   const userAgent = String(env.DETAIL_USER_AGENT || "itch-rpg-feed-detail-worker/1.0");
 
-  return runSingleDetailStep({
-    db,
-    dryRun: options.dryRun,
-    staleDays: options.staleDays,
-    cursorKey: options.cursorKey,
-    fetchDetail: (url) => fetchAndParseDetail(url, options.requestTimeoutMs, userAgent),
+  const runs = [];
+  const total = Math.max(1, FETCHES_PER_REQUEST);
+
+  for (let i = 0; i < total; i += 1) {
+    const stepSummary = await runSingleDetailStep({
+      db,
+      dryRun: options.dryRun,
+      staleDays: options.staleDays,
+      cursorKey: options.cursorKey,
+      fetchDetail: (url) => fetchAndParseDetail(url, options.requestTimeoutMs, userAgent),
+    });
+    runs.push(stepSummary);
+  }
+
+  const aggregate = {
+    attempted_steps: runs.length,
+    updated: runs.filter((row) => row.action === "updated").length,
+    removed_404: runs.filter((row) => row.action === "removed_404").length,
+    removed_low_rating: runs.filter((row) => row.action === "removed_low_rating").length,
+    failed: runs.filter((row) => row.action === "failed").length,
+    empty: runs.filter((row) => row.action === "none").length,
+  };
+
+console.log({
+    fetches_per_request: total,
+    aggregate,
+    runs,
   });
+
+
+  return {
+    fetches_per_request: total,
+    aggregate,
+    runs,
+  };
 }
 
 export default {

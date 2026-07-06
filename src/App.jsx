@@ -666,7 +666,7 @@ export default function App() {
             ].join(" ")}
         >
             <section className="mx-auto w-full max-w-7xl">
-                <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-2 backdrop-blur-sm md:p-5">
+                <section className="relative rounded-2xl border border-white/10 bg-slate-950/45 p-2 backdrop-blur-sm md:p-5">
                     <div className="mt-0">
                         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Category</p>
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -835,27 +835,58 @@ export default function App() {
                                 </div>
                             ) : null}
 
-                            <a
-                                href="https://github.com/CodaBool/itch_ttrpg_discovery"
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex w-fit items-center gap-2 rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-100 transition hover:border-white/40"
-                                aria-label="Open project GitHub repository"
-                            >
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    width="16"
-                                    height="16"
-                                    fill="currentColor"
-                                    viewBox="0 0 16 16"
-                                    aria-hidden="true"
+                            <div className="flex w-full items-center justify-between gap-3">
+                                <a
+                                    href="https://github.com/CodaBool/itch_ttrpg_discovery"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex w-fit items-center gap-2 rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-100 transition hover:border-white/40"
+                                    aria-label="Open project GitHub repository"
                                 >
-                                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8" />
-                                </svg>
-                                GitHub - GPL3 - Free
-                            </a>
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        fill="currentColor"
+                                        viewBox="0 0 16 16"
+                                        aria-hidden="true"
+                                    >
+                                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8" />
+                                    </svg>
+                                    GPL3 - Free
+                                </a>
+
+                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">
+                                    <span>Made with</span>
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="red"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        className="inline animate-pulse"
+                                        aria-hidden="true"
+                                    >
+                                        <path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />
+                                    </svg>
+                                    <span><a href="https://codabool.itch.io" target="_blank">CodaBool</a></span>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
+                    {isAdvancedOpen ? (
+                        <img
+                            src="/pom.gif"
+                            alt="pom pom"
+                            className="pointer-events-none absolute bottom-0 left-1/2 h-19 w-auto max-w-none -translate-x-1/2 object-contain"
+                            loading="lazy"
+                        />
+                    ) : null}
                 </section>
 
                 {isDesktopTools ? (
@@ -985,6 +1016,7 @@ export default function App() {
                                                             onAuthorToolAction={handleAuthorToolAction}
                                                             actionState={itemActionState[item.url] || "idle"}
                                                             shake={isDesktopTools && interactionMode === "block-author"}
+                                                            hiddenSourceTags={selectedSystem ? getSystemMatchTags(selectedSystem) : []}
                                                         />
                                                     ))}
                                                 </div>
@@ -1003,6 +1035,7 @@ export default function App() {
                                                     onAuthorToolAction={handleAuthorToolAction}
                                                     actionState={itemActionState[item.url] || "idle"}
                                                     shake={isDesktopTools && interactionMode === "block-author"}
+                                                    hiddenSourceTags={selectedSystem ? getSystemMatchTags(selectedSystem) : []}
                                                 />
                                             ))}
                                         </div>
@@ -1054,6 +1087,7 @@ export default function App() {
                                                 onAuthorToolAction={handleAuthorToolAction}
                                                 actionState={itemActionState[item.url] || "idle"}
                                                 shake={isDesktopTools && interactionMode === "block-author"}
+                                                hiddenSourceTags={selectedSystem ? getSystemMatchTags(selectedSystem) : []}
                                             />
                                         ))}
                                     </div>
@@ -1073,6 +1107,7 @@ export default function App() {
                                             onAuthorToolAction={handleAuthorToolAction}
                                             actionState={itemActionState[item.url] || "idle"}
                                             shake={isDesktopTools && interactionMode === "block-author"}
+                                            hiddenSourceTags={selectedSystem ? getSystemMatchTags(selectedSystem) : []}
                                         />
                                     ))
                                 ) : (

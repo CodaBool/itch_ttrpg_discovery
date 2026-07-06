@@ -17,6 +17,23 @@ function formatSourceTerm(term) {
   return normalized.replace(/-/g, " ");
 }
 
+function readSourceTags(source) {
+  if (!source || typeof source !== "object") return [];
+
+  if (Array.isArray(source.tags)) {
+    return source.tags.map((tag) => String(tag || "").trim().toLowerCase()).filter(Boolean);
+  }
+
+  if (typeof source.term === "string") {
+    return source.term
+      .split("+")
+      .map((tag) => tag.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
 function formatAuthorName(author) {
   const value = (author || "unknown author").trim();
   return value.replace(/-/g, " ");
@@ -117,6 +134,7 @@ function hideMetricTooltip() {
 export default function ItemCard({
   item,
   isVipAuthor = false,
+  hiddenSourceTags = [],
   readingMode = false,
   interactionMode = "none",
   onToolAction,
@@ -124,7 +142,14 @@ export default function ItemCard({
   actionState = "idle",
   shake = false,
 }) {
-  const sourceChips = item.source.slice(0, 4);
+  const hiddenTagSet = new Set(hiddenSourceTags.map((tag) => String(tag || "").toLowerCase()));
+  const sourceChips = item.source
+    .filter((source) => {
+      if (!hiddenTagSet.size) return true;
+      const tags = readSourceTags(source);
+      return !tags.some((tag) => hiddenTagSet.has(tag));
+    })
+    .slice(0, 4);
   const toolModeEnabled = interactionMode !== "none";
   const isFree = isFreePrice(item.price);
   const displayTitle = decodeHtmlEntities(item.title);

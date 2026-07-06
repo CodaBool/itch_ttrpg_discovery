@@ -54,7 +54,10 @@ async function fetchAndParseDetail(url, requestTimeoutMs, userAgent) {
     const html = await response.text();
     console.log("response for", url)
 
-    return parseDetailFromHtml(html);
+    const res = parseDetailFromHtml(html);
+    console.log(res)
+
+    return res
   } catch (error) {
     if (error?.name === "AbortError") {
       const timeoutError = new Error(`HTTP timeout after ${requestTimeoutMs}ms`);

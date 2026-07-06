@@ -10,3 +10,18 @@ binding = "DB"
 database_name = "itch-rpg-feed"
 migrations_dir = "../migrations"
 database_id = "9c508136-520e-4731-aba3-321d40cc13c6"
+
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1

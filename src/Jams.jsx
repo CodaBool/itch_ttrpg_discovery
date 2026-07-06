@@ -432,6 +432,31 @@ const JAM_ENTRIES = [
 
 const AWARDS = [
   {
+  year: 2022,
+  title: "The Awards",
+  url: "https://theawards.games/?page_id=1051",
+  description: "Award",
+  signal: "",
+},
+  {
+  year: 2023,
+  title: "The Awards",
+  url: "https://theawards.games/?page_id=1089",
+  description: "Award",
+  signal: "",
+},
+  {
+  year: 2024,
+  title: "The Awards",
+  url: "https://theawards.games/?page_id=1182",
+  description: "Award",
+  signal: "",
+},
+
+
+
+
+  {
   year: 2026,
   title: "ENNIE",
   url: "https://ennie-awards.com/2026-nominees/",

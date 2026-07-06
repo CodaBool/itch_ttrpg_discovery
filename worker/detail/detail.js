@@ -52,6 +52,8 @@ async function fetchAndParseDetail(url, requestTimeoutMs, userAgent) {
     }
 
     const html = await response.text();
+    console.log("response for", url)
+
     return parseDetailFromHtml(html);
   } catch (error) {
     if (error?.name === "AbortError") {

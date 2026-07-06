@@ -10,6 +10,7 @@
     "wipe": "node --env-file=../.env scripts/wipe.mjs",
     "worker:dev": "wrangler dev",
     "worker:deploy": "wrangler deploy",
+    "worker:dev-detail": "wrangler dev --config worker/detail/wrangler.toml --remote",
     "worker:deploy-frontend": "wrangler deploy --config wrangler.frontend.toml",
     "worker:d1:migrate": "wrangler d1 migrations apply itch-rpg-feed --remote",
     "worker:d1:migrate:local": "wrangler d1 migrations apply itch-rpg-feed"

@@ -69,12 +69,43 @@ export function parseDetailFromHtml(html) {
   const hasNoAi = /href=["'][^"']*tag-no-ai[^"']*["']/i.test(raw);
   const hasAiAssisted = /href=["'][^"']*ai-assisted[^"']*["']/i.test(raw);
 
+
+  const tags = extractItchTags(raw);
+    console.log("tags", tags);
+
   return {
     ratingTooltip,
     topicCount,
     commentCount,
     ai: hasAiAssisted ? "ai assisted" : hasNoAi ? "no ai" : null,
   };
+}
+
+function extractItchTags(raw) {
+  const tableRowMatches = raw.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) || [];
+
+  const tagsRow = tableRowMatches.find(row => {
+    const cells = row.match(/<td\b[^>]*>[\s\S]*?<\/td>/gi) || [];
+    const label = stripHtml(cells[0] || "").trim();
+    return label === "Tags";
+  });
+
+  if (!tagsRow) return [];
+
+  const cells = tagsRow.match(/<td\b[^>]*>[\s\S]*?<\/td>/gi) || [];
+  const valueCell = cells[1] || "";
+
+  return [...valueCell.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)]
+    .map(match => stripHtml(match[1]).trim())
+    .filter(Boolean);
+}
+
+function stripHtml(value) {
+  return decodeHtmlEntities(
+    String(value || "")
+      .replace(/<[^>]*>/g, "")
+      .replace(/\s+/g, " "),
+  );
 }
 
 export function deriveDetailMetrics(scraped) {

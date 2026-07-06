@@ -22,6 +22,20 @@ function formatAuthorName(author) {
   return value.replace(/-/g, " ");
 }
 
+function buildAuthorFontSizeStyle(authorName) {
+  const length = String(authorName || "").length;
+  if (length <= 10) return {};
+
+  // Past 10 chars, progressively shrink text so long names can fit in the fixed button width.
+  const scale = 10 / length;
+  const mobileSize = 9 * scale;
+  const desktopSize = 11 * scale;
+
+  return {
+    fontSize: `clamp(${mobileSize}px, ${mobileSize}px + 0.2vw, ${desktopSize}px)`,
+  };
+}
+
 function openInNewTab(url) {
   if (!url) return;
   window.open(url, "_blank", "noopener,noreferrer");
@@ -115,6 +129,8 @@ export default function ItemCard({
   const isFree = isFreePrice(item.price);
   const displayTitle = decodeHtmlEntities(item.title);
   const displayDescription = decodeHtmlEntities(item.description);
+  const displayAuthor = formatAuthorName(item.author);
+  const authorFontSizeStyle = buildAuthorFontSizeStyle(displayAuthor);
   const ratingMetric = parseRatingMetric(item.rating);
   const engagementMetric = parseEngagementMetric(item.engagement);
   const showRatingStar = Boolean(ratingMetric && ratingMetric.average >= 4);
@@ -245,7 +261,7 @@ export default function ItemCard({
         ) : null}
       </div>
 
-<div className="mt-auto flex min-w-0 items-center justify-between gap-2 pt-1.5 text-[11px] text-slate-400">
+<div className="mt-auto flex min-w-0 items-center justify-between gap-2 pt-1.5 text-[9px] text-slate-400 md:text-[11px]">
   <div className="flex min-w-0 items-center gap-4">
           <span className={hoverRevealClass}>{formatDate(item.publish_date)}</span>
           <div className="flex items-center gap-4">
@@ -256,10 +272,10 @@ export default function ItemCard({
                 onMouseMove={(event) => showMetricTooltip(event, ratingTooltip)}
                 onMouseLeave={hideMetricTooltip}
               >
-                <span className="pointer-events-none absolute right-full top-1/2 mr-px -translate-x-0.5 -translate-y-1/2 text-[11px] font-semibold text-red-300 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100">
+                <span className="pointer-events-none absolute right-full top-1/2 mr-px -translate-x-0.5 -translate-y-1/2 text-[11px] font-semibold text-red-300 opacity-100 transition-all duration-200 md:opacity-0 md:group-hover:translate-x-0 md:group-hover:opacity-100">
                   {ratingCount}
                 </span>
-                <span className="inline-flex h-4 w-4 items-center justify-center text-red-400 opacity-40 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" aria-label={ratingTooltip}>
+                <span className="inline-flex h-4 w-4 items-center justify-center text-red-400 opacity-100 transition-all duration-200 md:opacity-40 md:group-hover:translate-x-0.5 md:group-hover:opacity-100" aria-label={ratingTooltip}>
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 -0.5 33 33"
@@ -282,10 +298,10 @@ export default function ItemCard({
                 onMouseMove={(event) => showMetricTooltip(event, engagementTooltip)}
                 onMouseLeave={hideMetricTooltip}
               >
-                <span className="pointer-events-none absolute right-full top-1/2 mr-px -translate-x-0.5 -translate-y-1/2 text-[11px] font-semibold text-amber-300 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100">
+                <span className="pointer-events-none absolute right-full top-1/2 mr-px -translate-x-0.5 -translate-y-1/2 text-[11px] font-semibold text-amber-300 opacity-100 transition-all duration-200 md:opacity-0 md:group-hover:translate-x-0 md:group-hover:opacity-100">
                   {engagementMetric}
                 </span>
-                <span className="inline-flex h-4 w-4 items-center justify-center opacity-40 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" aria-label={engagementTooltip}>
+                <span className="inline-flex h-4 w-4 items-center justify-center opacity-100 transition-all duration-200 md:opacity-40 md:group-hover:translate-x-0.5 md:group-hover:opacity-100" aria-label={engagementTooltip}>
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     preserveAspectRatio="xMidYMid"
@@ -333,7 +349,8 @@ export default function ItemCard({
               }
               event.stopPropagation();
             }}
-            className={`min-w-0 max-w-[50%] truncate inline-flex items-center justify-center gap-1 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-100 transition hover:border-white/40 ${hoverRevealClass}`}
+            style={authorFontSizeStyle}
+            className={`min-w-0 max-w-[50%] truncate inline-flex items-center justify-center gap-1 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-100 transition hover:border-white/40 md:text-[11px] ${hoverRevealClass}`}
           >
             {isVipAuthor ? (
               <svg
@@ -349,10 +366,10 @@ export default function ItemCard({
                 />
               </svg>
             ) : null}
-            {formatAuthorName(item.author)}
+            {displayAuthor}
           </a>
         ) : (
-          <span className={hoverRevealClass}>{formatAuthorName(item.author)}</span>
+          <span style={authorFontSizeStyle} className={hoverRevealClass}>{displayAuthor}</span>
         )}
       </div>
     </article>

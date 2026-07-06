@@ -36,6 +36,8 @@ const JAM_ENTRIES = [
   { rank: 39, year: 2025, title: "Mini-Campaign", url: "https://itch.io/jam/2025-dg-mini-campaign-jam/entries", signal: "9 entries", description: "Delta Green" },
   { rank: 39, year: 2025, title: "ENNIE", url: "https://ennie-awards.com/portfolio-item/2025-nominees-and-winners/", signal: "awards list", description: "Awards" },
   { rank: 39, year: 2024, title: "ENNIE", url: "https://ennie-awards.com/portfolio-item/2024-nominees-and-winners/", signal: "awards list", description: "Awards" },
+  { rank: 39, year: 2024, title: "CRITS", url: "https://docs.google.com/document/d/1slfaVQ9pWKViZwT0JEaB-2uO5Sm0innGVVN_a2xCsw8", signal: "awards list", description: "Awards" },
+  { rank: 39, year: 2023, title: "CRITS", url: "https://docs.google.com/document/d/1DQ6LEjqMPpwXXmzjdHqne-i8VQ_8VD4ndHIlHiHMJqk", signal: "awards list", description: "Awards" },
   // { rank: 40, year: 2024, title: "Liminal Horror Halloween Monster Jam", url: "https://itch.io/jam/liminal-horror-halloween-monster-jam", signal: "21 entries", description: "Focused Liminal Horror monster jam for spooky, modern-horror creature material." },
   { rank: 3, year: 2025, title: "One-Page RPG", url: "https://itch.io/jam/one-page-rpg-jam-2025/entries", signal: "680 entries", description: "variety" },
   { rank: 5, year: 2025, title: "Tiny World", url: "https://itch.io/jam/tiny-world-ttrpg-jam/entries", signal: "174 entries", description: "8pg or less" },

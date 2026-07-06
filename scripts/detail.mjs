@@ -1,20 +1,13 @@
 import puppeteer from "puppeteer";
-
-function toInt(value, fallback) {
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.floor(n) : fallback;
-}
-
-function toBool(value, fallback = false) {
-  if (value == null) return fallback;
-  const normalized = String(value).trim().toLowerCase();
-  if (!normalized) return fallback;
-  return ["1", "true", "yes", "on"].includes(normalized);
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { pathToFileURL } from "node:url";
+import {
+  CloudflareD1Client,
+  deriveDetailMetrics,
+  shouldRemoveForLowRating,
+  sleep,
+  toBool,
+  toInt,
+} from "../worker/detail/shared.js";
 
 function mustEnv(name) {
   const value = process.env[name];
@@ -24,51 +17,7 @@ function mustEnv(name) {
   return value.trim();
 }
 
-class CloudflareD1Client {
-  constructor({ accountId, databaseId, apiToken }) {
-    this.accountId = accountId;
-    this.databaseId = databaseId;
-    this.apiToken = apiToken;
-    this.endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`;
-  }
-
-  async query(sql, params = []) {
-    const response = await fetch(this.endpoint, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ sql, params }),
-    });
-
-    let payload = null;
-    try {
-      payload = await response.json();
-    } catch {
-      payload = null;
-    }
-
-    if (!response.ok) {
-      const statusText = payload?.errors?.[0]?.message || response.statusText || "request failed";
-      const err = new Error(`D1 HTTP ${response.status}: ${statusText}`);
-      err.status = response.status;
-      throw err;
-    }
-
-    if (!payload?.success) {
-      const statusText = payload?.errors?.[0]?.message || "Cloudflare API returned success=false";
-      const err = new Error(`D1 API error: ${statusText}`);
-      err.status = response.status;
-      throw err;
-    }
-
-    const statement = Array.isArray(payload.result) ? payload.result[0] : payload.result;
-    return statement?.results || [];
-  }
-}
-
-async function openBrowserSession() {
+export async function openBrowserSession() {
   const protocolTimeoutMs = Math.max(10000, toInt(process.env.DETAIL_PROTOCOL_TIMEOUT_MS, 120000));
   const launchHeadless = toBool(process.env.DETAIL_HEADLESS, true);
   const browser = await puppeteer.launch({
@@ -86,36 +35,7 @@ async function openBrowserSession() {
   };
 }
 
-function parseRatingFromTooltip(tooltip) {
-  if (!tooltip || typeof tooltip !== "string") return null;
-
-  const match = tooltip
-    .trim()
-    .match(/([0-9]+(?:\.[0-9]+)?)\s+average rating from\s+([0-9]+)\s+total ratings?/i);
-
-  if (!match) return null;
-
-  const average = match[1];
-  const totalRatings = match[2];
-  return `${average}over${totalRatings}`;
-}
-
-function shouldRemoveForLowRating(rawRating) {
-  const value = String(rawRating || "").trim();
-  if (!value) return false;
-
-  const parts = value.split("over");
-  if (parts.length !== 2) return false;
-
-  const average = Number(parts[0]);
-  const totalRatings = Number(parts[1]);
-  if (!Number.isFinite(average) || !Number.isFinite(totalRatings)) return false;
-
-  // Treat 1-star average with at least 2 reviews as a remove signal.
-  return average === 1 && totalRatings >= 2;
-}
-
-async function scrapeDetail(page, url) {
+export async function scrapeDetail(page, url) {
   const response = await page.goto(url, {
     waitUntil: "domcontentloaded",
     timeout: Math.max(1000, toInt(process.env.DETAIL_REQUEST_TIMEOUT_MS, 30000)),
@@ -154,7 +74,7 @@ async function scrapeDetail(page, url) {
   });
 }
 
-async function createDetailPage(browser) {
+export async function createDetailPage(browser) {
   const page = await browser.newPage();
   await page.setUserAgent(
     process.env.LOCAL_USER_AGENT ||
@@ -163,7 +83,7 @@ async function createDetailPage(browser) {
   return page;
 }
 
-async function recycleDetailPage(page, browser) {
+export async function recycleDetailPage(page, browser) {
   try {
     if (page && !page.isClosed()) {
       await page.close({ runBeforeUnload: false });
@@ -175,7 +95,7 @@ async function recycleDetailPage(page, browser) {
   return createDetailPage(browser);
 }
 
-async function closeBrowserSession(session) {
+export async function closeBrowserSession(session) {
   if (!session?.browser) return;
 
   try {
@@ -189,7 +109,7 @@ async function closeBrowserSession(session) {
   }
 }
 
-async function fetchAllUrls(d1, { startOffset, maxItems, queryBatchSize }) {
+export async function fetchAllUrls(d1, { startOffset, maxItems, queryBatchSize }) {
   const collected = [];
   let offset = startOffset;
 
@@ -217,7 +137,7 @@ async function fetchAllUrls(d1, { startOffset, maxItems, queryBatchSize }) {
   return collected;
 }
 
-function makeBatches(urls, batchSize) {
+export function makeBatches(urls, batchSize) {
   const batches = [];
 
   for (let i = 0; i < urls.length; i += batchSize) {
@@ -230,7 +150,7 @@ function makeBatches(urls, batchSize) {
   return batches;
 }
 
-async function main() {
+export async function runParallelDetailScrape() {
   const accountId = mustEnv("CLOUDFLARE_ACCOUNT_ID");
   const databaseId = mustEnv("CLOUDFLARE_D1_DATABASE_ID");
   const apiToken = mustEnv("CLOUDFLARE_API_TOKEN");
@@ -310,13 +230,14 @@ async function main() {
 
         try {
           const scraped = await scrapeDetail(page, url);
-          const rating = parseRatingFromTooltip(scraped.ratingTooltip);
-          const engagement = Number(scraped.topicCount || 0) + Number(scraped.commentCount || 0);
-          const ai = scraped.ai || null;
+          const metrics = deriveDetailMetrics(scraped);
+          const rating = metrics.rating;
+          const engagement = metrics.engagement;
+          const ai = metrics.ai;
 
           if (shouldRemoveForLowRating(rating)) {
             if (!dryRun) {
-              await d1.query("DELETE FROM items WHERE url = ?", [url]);
+              await d1.execute("DELETE FROM items WHERE url = ?", [url]);
             }
 
             counters.removedLowRating += 1;
@@ -333,7 +254,7 @@ async function main() {
           }
 
           if (!dryRun) {
-            await d1.query(
+            await d1.execute(
               `UPDATE items
                SET rating = ?,
                    engagement = ?,
@@ -395,7 +316,7 @@ async function main() {
       console.log(`[cleanup] dry run: would delete ${notFoundUrls.size} URL(s) that returned HTTP 404`);
     } else {
       for (const missingUrl of notFoundUrls) {
-        await d1.query("DELETE FROM items WHERE url = ?", [missingUrl]);
+        await d1.execute("DELETE FROM items WHERE url = ?", [missingUrl]);
         counters.removed404 += 1;
       }
       console.log(`[cleanup] deleted ${counters.removed404} URL(s) that returned HTTP 404`);
@@ -434,7 +355,15 @@ async function main() {
   console.log("DETAIL_REQUEST_TIMEOUT_MS (default 30000)");
 }
 
-main().catch((error) => {
-  console.error("detail.mjs failed:", error);
-  process.exitCode = 1;
-});
+export async function main() {
+  await runParallelDetailScrape();
+}
+
+const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isDirectRun) {
+  main().catch((error) => {
+    console.error("detail.mjs failed:", error);
+    process.exitCode = 1;
+  });
+}

@@ -74,7 +74,7 @@ async function loadSubscriptionByEmail(env, email) {
 }
 
 async function sendEmail(env, toEmail, subject, html) {
-  const fromName = "indie-ttrpg-discovery@codabool.com";
+  const fromName = "ttrpg@codabool.com";
   const deliverySecret = String(env?.EMAIL_WORKER_SECRET || "").trim();
   const deliveryUrlBase = "https://email.codabool.workers.dev";
 
@@ -82,38 +82,17 @@ async function sendEmail(env, toEmail, subject, html) {
     throw new Error("Missing EMAIL_WORKER_SECRET env var");
   }
 
-  const recipientName = toEmail.split("@")[0] || "subscriber";
-
-  // Keep this request shape aligned with test.junk.js, which is known-good.
   const urlParams = new URLSearchParams({
     subject,
     to: toEmail,
-    name: recipientName,
+    name: "Indie TTRPG Digest",
     from: fromName,
     secret: deliverySecret,
   }).toString();
 
-  console.log("[email-worker] outbound request", {
-    endpoint: deliveryUrlBase,
-    query: {
-      subject,
-      to: toEmail,
-      name: recipientName,
-      from: fromName,
-      secret: "[redacted]",
-    },
-    body_bytes: String(html || "").length,
-  });
-
   const response = await fetch(`${deliveryUrlBase}/?${urlParams}`, {
     method: "POST",
     body: String(html || ""),
-  });
-
-  console.log("[email-worker] outbound response", {
-    status: response.status,
-    ok: response.ok,
-    recipient: toEmail,
   });
 
   if (!response.ok) {
@@ -130,9 +109,6 @@ async function sendForSubscription(env, items, subscription, now = new Date()) {
     ...preference,
     title: preference.title || "Your Indie TTRPG Digest",
   }, now);
-
-  console.log('lets see that html')
-  console.log(preview.html)
 
   await sendEmail(env, email, buildSubject(now), preview.html);
 
@@ -193,21 +169,11 @@ async function handleManualSend(request, env) {
   const providedSecret = String(url.searchParams.get("secret") || "").trim();
   const configuredSecret = String(env?.EMAIL_WORKER_SECRET || "").trim();
 
-  console.log("[email-worker] manual send request", {
-    method: request.method,
-    has_body: body != null,
-    email,
-    has_secret: Boolean(providedSecret),
-    has_configured_secret: Boolean(configuredSecret),
-  });
-
   if (!email) {
-    console.log("[email-worker] manual send rejected", { reason: "missing_email" });
     return json({ error: "email is required" }, { status: 400 });
   }
 
   if (providedSecret !== configuredSecret) {
-    console.log("[email-worker] manual send rejected", { reason: "unauthorized" });
     return json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -216,30 +182,14 @@ async function handleManualSend(request, env) {
     loadSubscriptionByEmail(env, email),
   ]);
 
-  console.log("[email-worker] manual send loaded data", {
-    items_count: items.length,
-    subscription_found: Boolean(subscription),
-    email,
-  });
-
   if (!subscription) {
-    console.log("[email-worker] manual send rejected", { reason: "subscription_not_found", email });
     return json({ error: "No subscription found for email" }, { status: 404 });
   }
 
   try {
     const result = await sendForSubscription(env, items, subscription, new Date());
-    console.log("[email-worker] manual send success", {
-      email,
-      items_count: result.items_count,
-    });
     return json({ ok: true, ...result });
   } catch (error) {
-    console.log("[email-worker] manual send failed", {
-      email,
-      error: error instanceof Error ? error.message : "unknown error",
-      stack: error instanceof Error ? error.stack : null,
-    });
     return json({
       ok: false,
       error: error instanceof Error ? error.message : "unknown error",

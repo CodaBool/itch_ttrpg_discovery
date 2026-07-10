@@ -35,7 +35,7 @@ function parsePreferenceJson(rawPreference) {
 function buildSubject(now = new Date()) {
   const month = new Intl.DateTimeFormat("en-US", { month: "long" }).format(now);
   const year = new Intl.DateTimeFormat("en-US", { year: "numeric" }).format(now);
-  return `Your Indie TTRPG Digest - ${month} ${year}`;
+  return `Your Indie TTRPG Digest - ${month}`;
 }
 
 async function loadItems(env) {
@@ -74,7 +74,7 @@ async function loadSubscriptionByEmail(env, email) {
 }
 
 async function sendEmail(env, toEmail, subject, html) {
-  const fromName = "ttrpg@codabool.com";
+  const fromName = "indie ttrpg discovery";
   const deliverySecret = String(env?.EMAIL_WORKER_SECRET || "").trim();
   const deliveryUrlBase = "https://email.codabool.workers.dev";
 

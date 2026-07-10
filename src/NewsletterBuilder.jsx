@@ -579,9 +579,6 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
                 </div>
 
                 <div className="px-5 py-4 md:px-7">
-                  <h3 className="text-[30px] font-medium tracking-tight text-slate-800 md:text-[34px]">
-                    Your Indie TTRPG Digest
-                  </h3>
 
                   <div className="mt-4 flex items-center justify-between gap-3 border-b border-black/10 pb-4">
                     <div className="flex min-w-0 items-center gap-3">
@@ -589,40 +586,13 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
                         C
                       </span>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-800">CodaBool Feed</p>
+                        <p className="truncate text-sm font-semibold text-slate-800">CodaBool</p>
                         <p className="truncate text-xs text-slate-600">to {email || "you@example.com"}</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* <div className="mt-5 rounded-xl border border-black/10 bg-white px-4 py-4">
-                    <p className="text-sm text-slate-700">Your configured filters this month:</p>
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(topSystems.length ? topSystems : [{ key: "none", label: "No systems selected", score: 0 }]).map((system) => (
-                        <span
-                          key={system.key}
-                          className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-700"
-                        >
-                          {system.label}
-                          {system.score > 0 ? <span>{`(${system.score}/5)`}</span> : null}
-                        </span>
-                      ))}
-                    </div>
-
-                    <div className="mt-3 grid gap-1.5 text-xs text-slate-600">
-                      <p>{englishOnly ? "English only enabled" : "All languages enabled"}</p>
-                      <p>{excludeAiAssisted ? "AI-assisted projects excluded" : "AI-assisted projects included"}</p>
-                      <p>{majorAwards ? "Major annual awards updates enabled" : "Major annual awards updates disabled"}</p>
-                      <p>{addGameAssets ? "Game assets included" : "Game assets not included"}</p>
-                      <p>{addToolsMiscGameMods ? "Tools, misc, and game-mods included" : "Tools, misc, and game-mods not included"}</p>
-                      <p>{excludedCreators.length ? `${excludedCreators.length} excluded creator(s)` : "No excluded creators"}</p>
-                      <p>{previewLoading ? "Refreshing preview..." : `${previewCount} item(s) included`}</p>
-                      {previewError ? <p className="text-red-500">{previewError}</p> : null}
-                    </div>
-                  </div> */}
-
-                  <div className="mt-5 overflow-hidden rounded-xl border border-black/10 bg-white">
+                  <div className="overflow-hidden rounded-xl bg-white">
                     <iframe
                       title="newsletter-html-preview"
                       srcDoc={previewHtml || "<html><body style='font-family: Arial, sans-serif; padding: 20px; color: #334155;'>Waiting for preview...</body></html>"}

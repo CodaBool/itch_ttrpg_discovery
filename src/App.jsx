@@ -739,6 +739,7 @@ export default function App() {
     const singleBucket = groupedBuckets.length === 1 ? groupedBuckets[0] : null;
     const shouldShowBeyondYear = showBeyondYear || alwaysShowBeyondYear;
     const focusedSystemLabel = SYSTEM_FILTERS.find((system) => system.key === focusedSystemKey)?.label || focusedSystemKey;
+    const hiddenFocusedSourceTags = focusedSystemKey ? getSystemMatchTags(focusedSystemKey) : [];
 
     function enableAlwaysShowBeyondYear() {
         setAlwaysShowBeyondYear(true);
@@ -1105,7 +1106,7 @@ export default function App() {
                                                             onAuthorToolAction={handleAuthorToolAction}
                                                             actionState={itemActionState[item.url] || "idle"}
                                                             shake={isDesktopTools && interactionMode === "block-author"}
-                                                            hiddenSourceTags={[]}
+                                                            hiddenSourceTags={hiddenFocusedSourceTags}
                                                             hiddenSourceTerms={HIDDEN_SOURCE_TERMS}
                                                         />
                                                     ))}
@@ -1124,7 +1125,7 @@ export default function App() {
                                                     onAuthorToolAction={handleAuthorToolAction}
                                                     actionState={itemActionState[item.url] || "idle"}
                                                     shake={isDesktopTools && interactionMode === "block-author"}
-                                                    hiddenSourceTags={[]}
+                                                    hiddenSourceTags={hiddenFocusedSourceTags}
                                                     hiddenSourceTerms={HIDDEN_SOURCE_TERMS}
                                                 />
                                             ))}
@@ -1176,7 +1177,7 @@ export default function App() {
                                                 onAuthorToolAction={handleAuthorToolAction}
                                                 actionState={itemActionState[item.url] || "idle"}
                                                 shake={isDesktopTools && interactionMode === "block-author"}
-                                                hiddenSourceTags={[]}
+                                                hiddenSourceTags={hiddenFocusedSourceTags}
                                                 hiddenSourceTerms={HIDDEN_SOURCE_TERMS}
                                             />
                                         ))}
@@ -1196,7 +1197,7 @@ export default function App() {
                                             onAuthorToolAction={handleAuthorToolAction}
                                             actionState={itemActionState[item.url] || "idle"}
                                             shake={isDesktopTools && interactionMode === "block-author"}
-                                            hiddenSourceTags={[]}
+                                            hiddenSourceTags={hiddenFocusedSourceTags}
                                             hiddenSourceTerms={HIDDEN_SOURCE_TERMS}
                                         />
                                     ))

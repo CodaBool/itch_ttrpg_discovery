@@ -234,11 +234,11 @@ async function handleUnsubscribe(request, env) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>unsubscripted</title>
+    <title>Unsubscribe</title>
   </head>
   <body style="margin:0; min-height:100vh; display:grid; place-items:center; background:#0f172a; color:#e2e8f0; font-family:Arial,sans-serif;">
     <main style="display:flex; flex-direction:column; align-items:center; gap:18px;">
-      <h1 style="margin:0; font-size:32px; letter-spacing:0.08em; text-transform:uppercase;">unsubscripted</h1>
+      <h1 style="margin:0; font-size:32px; letter-spacing:0.08em; text-transform:uppercase;">Unsubscribed Successfully</h1>
       <a href="https://discover.codabool.workers.dev/" aria-label="Go home" style="display:inline-flex; align-items:center; justify-content:center; width:54px; height:54px; border:1px solid rgba(226,232,240,0.35); border-radius:12px; color:#e2e8f0; text-decoration:none;">
         <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M3 11.5 12 4l9 7.5" />

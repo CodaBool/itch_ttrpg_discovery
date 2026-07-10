@@ -58,9 +58,14 @@ function appendUnsubscribeFooter(htmlBody, email) {
 
   const footer = `
     <div style="margin: 28px auto 0 auto; max-width: 760px; padding: 14px 12px 0 12px; text-align: center; font-family: Arial, sans-serif;">
-      <a href="${unsubscribeUrl}" style="display:inline-block; border:1px solid #cbd5e1; border-radius:10px; padding:10px 14px; text-decoration:none; color:#334155; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;">
-        Unsubscribe
-      </a>
+      <div style="display:inline-flex; gap:10px; align-items:center; justify-content:center; flex-wrap:wrap;">
+        <a href="${unsubscribeUrl}" style="display:inline-block; border:1px solid #cbd5e1; border-radius:10px; padding:10px 14px; text-decoration:none; color:#334155; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;">
+          Unsubscribe
+        </a>
+        <a href="https://discover.codabool.workers.dev" style="display:inline-block; border:1px solid #cbd5e1; border-radius:10px; padding:10px 14px; text-decoration:none; color:#334155; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;">
+          Visit Site
+        </a>
+      </div>
     </div>
   `;
 
@@ -283,7 +288,7 @@ export default {
       return handleManualSend(request, env);
     }
 
-    if (request.method === "DELETE") {
+    if (request.method === "GET") {
       return handleUnsubscribe(request, env);
     }
 

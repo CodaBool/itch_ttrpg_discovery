@@ -202,6 +202,12 @@ function decodeHtmlEntities(value) {
     .replace(/&gt;/g, ">");
 }
 
+function truncateText(value, maxLength) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trim()}...`;
+}
+
 function formatDate(raw) {
   const parsed = new Date(raw || "");
   if (Number.isNaN(parsed.getTime())) return "Unknown date";
@@ -312,8 +318,11 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
   const cardsHtml = items.map((item) => {
     const sourceArray = parseSourceArray(item.source);
     const tags = sourceTagsForDisplay(sourceArray).slice(0, 6);
-    const displayTitle = decodeHtmlEntities(item.title || "Untitled");
-    const description = decodeHtmlEntities(String(item.description || "No description available.").trim());
+    const displayTitle = truncateText(decodeHtmlEntities(item.title || "Untitled"), 90);
+    const description = truncateText(
+      decodeHtmlEntities(String(item.description || "No description available.").trim()),
+      200
+    );
     const authorRaw = decodeHtmlEntities(item.author || "unknown");
     const authorText = escapeHtml(authorRaw);
     const authorLink = item.author_url
@@ -323,7 +332,7 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
     return `
       <article class="card" style="border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff; min-width: 0;">
         ${item.image_url ? `
-          <div class="card-image-frame" style="position:relative; width:100%; padding-top:74.94%; overflow:hidden; background:#0b1220;">
+          <div class="card-image-frame" style="position:relative; width:100%; padding-top:87.91%; overflow:hidden; background:#0b1220;">
             <img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.title)}" style="position:absolute; inset:0; display:block; width:100%; height:100%; object-fit:cover;" />
           </div>
         ` : ""}

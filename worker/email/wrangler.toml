@@ -1,6 +1,7 @@
 name = 'itch-ttrpg-discovery-email'
 main = "email.js"
 compatibility_date = "2026-07-10"
+compatibility_flags = ["global_fetch_strictly_public"]
 
 [triggers]
 crons = ["0 12 1 * *"]

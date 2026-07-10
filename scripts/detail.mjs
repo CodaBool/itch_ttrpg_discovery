@@ -1,5 +1,5 @@
 import puppeteer from "puppeteer";
-import { franc } from "franc";
+import { francAll } from "franc";
 import { pathToFileURL } from "node:url";
 import {
   CloudflareD1Client,
@@ -97,12 +97,33 @@ export function detectLanguageIso3(rawText) {
   const normalized = String(rawText || "").replace(/\s+/g, " ").trim();
   if (!normalized) return null;
 
-  const detectedIso3 = franc(normalized, { minLength: 120 });
-  if (!detectedIso3 || detectedIso3 === "und" || detectedIso3 === "eng") {
+  const letterCount = (normalized.match(/\p{L}/gu) || []).length;
+  if (letterCount < 160) return null;
+
+  const ranked = francAll(normalized, { minLength: 120 });
+  const top = ranked[0] || null;
+  const bestIso3 = top?.[0] || null;
+  const bestScore = Number(top?.[1]);
+
+  const englishEntry = ranked.find((entry) => entry?.[0] === "eng") || null;
+  const englishScore = Number(englishEntry?.[1]);
+
+  if (!bestIso3 || bestIso3 === "und" || bestIso3 === "eng") {
     return null;
   }
 
-  return detectedIso3;
+  if (!Number.isFinite(bestScore)) return null;
+
+  // If English is also very plausible, treat as English to avoid false non-English flags.
+  if (Number.isFinite(englishScore)) {
+    const ENGLISH_CONFIDENT = 0.95;
+    const MIN_MARGIN_OVER_ENGLISH = 0.08;
+
+    if (englishScore >= ENGLISH_CONFIDENT) return null;
+    if (bestScore - englishScore < MIN_MARGIN_OVER_ENGLISH) return null;
+  }
+
+  return bestIso3;
 }
 
 export async function createDetailPage(browser) {

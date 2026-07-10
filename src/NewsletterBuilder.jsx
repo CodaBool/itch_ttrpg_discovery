@@ -186,7 +186,7 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            title: "Monthly TTRPG Feed For You",
+            title: "Your Indie TTRPG Digest",
             systems: systemScores,
             majorAwards,
             englishOnly,
@@ -437,7 +437,7 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
 
                 <div className="px-5 py-4 md:px-7">
                   <h3 className="text-[30px] font-medium tracking-tight text-slate-800 md:text-[34px]">
-                    Monthly TTRPG Feed For You
+                    Your Indie TTRPG Digest
                   </h3>
 
                   <div className="mt-4 flex items-center justify-between gap-3 border-b border-black/10 pb-4">

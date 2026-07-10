@@ -270,7 +270,7 @@ export function filterNewsletterItems(items, rawPreference = {}, now = new Date(
 
 export function buildNewsletterHtml(items, rawPreference = {}) {
   const preference = {
-    title: String(rawPreference.title || "Monthly TTRPG Feed For You").trim() || "Monthly TTRPG Feed For You",
+    title: String(rawPreference.title || "Your Indie TTRPG Digest").trim() || "Your Indie TTRPG Digest",
   };
 
   const cardsHtml = items
@@ -278,6 +278,10 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
       const sourceArray = parseSourceArray(item.source);
       const tags = sourceTagsForDisplay(sourceArray).slice(0, 8);
       const description = String(item.description || "No description available.").trim();
+      const authorText = escapeHtml(item.author || "unknown");
+      const authorLink = item.author_url
+        ? `<a href="${escapeHtml(item.author_url)}" style="color: #0369a1; text-decoration: none;">${authorText}</a>`
+        : authorText;
 
       return `
         <tr>
@@ -305,9 +309,9 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
                     </tr>
                     <tr>
                       <td style="font-size: 12px; color: #334155; padding-bottom: 10px;">
-                        <strong>Author:</strong> ${escapeHtml(item.author || "unknown")} &nbsp;|&nbsp;
-                        <strong>Date:</strong> ${escapeHtml(formatDate(item.publish_date || item.update_date || item.first_seen_at || item.updated_at))} &nbsp;|&nbsp;
-                        <strong>Price:</strong> ${escapeHtml(item.price || "-")}
+                        ${authorLink} &nbsp;|&nbsp;
+                        ${escapeHtml(formatDate(item.publish_date || item.update_date || item.first_seen_at || item.updated_at))} &nbsp;|&nbsp;
+                        ${escapeHtml(item.price || "-")}
                       </td>
                     </tr>
                     ${tags.length ? `

@@ -1,0 +1,223 @@
+import { prepareNewsletterPreview } from "../src/newsletter.js";
+
+const EMAIL_WORKER_URL = "https://email.codabool.workers.dev";
+
+function json(data, init = {}) {
+  const headers = new Headers(init.headers || {});
+  headers.set("content-type", "application/json; charset=utf-8");
+  headers.set("access-control-allow-origin", "*");
+  headers.set("access-control-allow-methods", "POST,OPTIONS");
+  headers.set("access-control-allow-headers", "content-type");
+
+  return new Response(JSON.stringify(data), {
+    ...init,
+    headers,
+  });
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function parsePreferenceJson(rawPreference) {
+  if (!rawPreference) return {};
+
+  if (typeof rawPreference === "object") {
+    return rawPreference;
+  }
+
+  try {
+    const parsed = JSON.parse(String(rawPreference));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function buildSubject(now = new Date()) {
+  const month = new Intl.DateTimeFormat("en-US", { month: "long" }).format(now);
+  const year = new Intl.DateTimeFormat("en-US", { year: "numeric" }).format(now);
+  return `Your Indie TTRPG Digest - ${month} ${year}`;
+}
+
+async function loadItems(env) {
+  const rows = await env.DB.prepare(
+    `SELECT
+      url, source, title, description, image_url, price, publish_date, update_date,
+      author, author_url, language, rating, engagement, ai, first_seen_at, updated_at
+     FROM items
+     ORDER BY updated_at DESC
+     LIMIT 6000`
+  ).all();
+
+  return rows.results || [];
+}
+
+async function loadAllSubscriptions(env) {
+  const rows = await env.DB.prepare(
+    `SELECT email, preference_json
+     FROM newsletter_subscriptions
+     ORDER BY updated_at DESC`
+  ).all();
+
+  return rows.results || [];
+}
+
+async function loadSubscriptionByEmail(env, email) {
+  const row = await env.DB.prepare(
+    `SELECT email, preference_json
+     FROM newsletter_subscriptions
+     WHERE lower(trim(email)) = ?`
+  )
+    .bind(normalizeEmail(email))
+    .first();
+
+  return row || null;
+}
+
+async function sendEmail(env, toEmail, subject, html) {
+  const fromName = String(env.NEWSLETTER_FROM_NAME || "CodaBool Feed").trim();
+  const deliverySecret = String(env.EMAIL_WORKER_SECRET || env.CLOUDFLARE_API_TOKEN || "").trim();
+  const deliveryUrlBase = String(env.EMAIL_WORKER_URL || EMAIL_WORKER_URL).trim();
+
+  if (!deliverySecret) {
+    throw new Error("Missing EMAIL_WORKER_SECRET (or CLOUDFLARE_API_TOKEN) env var");
+  }
+
+  const recipientName = toEmail.split("@")[0] || "subscriber";
+
+  const url = new URL(deliveryUrlBase);
+  url.searchParams.set("to", toEmail);
+  url.searchParams.set("name", recipientName);
+  url.searchParams.set("from", fromName);
+  url.searchParams.set("subject", subject);
+  url.searchParams.set("format", "text/html");
+  url.searchParams.set("secret", deliverySecret);
+
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+    },
+    body: String(html || ""),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Mail send failed (${response.status}): ${message.slice(0, 300)}`);
+  }
+}
+
+async function sendForSubscription(env, items, subscription, now = new Date()) {
+  const email = normalizeEmail(subscription.email);
+  const preference = parsePreferenceJson(subscription.preference_json);
+
+  const preview = prepareNewsletterPreview(items, {
+    ...preference,
+    title: preference.title || "Your Indie TTRPG Digest",
+  }, now);
+
+  await sendEmail(env, email, buildSubject(now), preview.html);
+
+  return {
+    email,
+    items_count: preview.items.length,
+  };
+}
+
+async function runMonthlySend(env, now = new Date()) {
+  const [items, subscriptions] = await Promise.all([
+    loadItems(env),
+    loadAllSubscriptions(env),
+  ]);
+
+  const summary = {
+    started_at: now.toISOString(),
+    processed: 0,
+    sent: 0,
+    failed: 0,
+    results: [],
+  };
+
+  for (const subscription of subscriptions) {
+    const email = normalizeEmail(subscription.email);
+    if (!email) continue;
+
+    summary.processed += 1;
+
+    try {
+      const result = await sendForSubscription(env, items, subscription, now);
+      summary.sent += 1;
+      summary.results.push({ ...result, ok: true });
+    } catch (error) {
+      summary.failed += 1;
+      summary.results.push({
+        email,
+        ok: false,
+        error: error instanceof Error ? error.message : "unknown error",
+      });
+    }
+  }
+
+  summary.finished_at = new Date().toISOString();
+  return summary;
+}
+
+async function handleManualSend(request, env) {
+  let body = null;
+  try {
+    body = await request.json();
+  } catch {
+    body = null;
+  }
+
+  const url = new URL(request.url);
+  const email = normalizeEmail(body?.email ?? url.searchParams.get("email"));
+  const secret = String(body?.secret ?? url.searchParams.get("secret") ?? "").trim();
+
+  if (!email) {
+    return json({ error: "email is required" }, { status: 400 });
+  }
+
+  const expected = String(env.CLOUDFLARE_API_TOKEN || "").trim();
+  if (!expected || secret !== expected) {
+    return json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const [items, subscription] = await Promise.all([
+    loadItems(env),
+    loadSubscriptionByEmail(env, email),
+  ]);
+
+  if (!subscription) {
+    return json({ error: "No subscription found for email" }, { status: 404 });
+  }
+
+  try {
+    const result = await sendForSubscription(env, items, subscription, new Date());
+    return json({ ok: true, ...result });
+  } catch (error) {
+    return json({
+      ok: false,
+      error: error instanceof Error ? error.message : "unknown error",
+    }, { status: 500 });
+  }
+}
+
+export default {
+  async fetch(request, env) {
+    if (request.method === "OPTIONS") {
+      return json({ ok: true });
+    }
+
+    if (request.method === "POST") {
+      return handleManualSend(request, env);
+    }
+
+    return json({ error: "Not found" }, { status: 404 });
+  },
+
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(runMonthlySend(env));
+  },
+};

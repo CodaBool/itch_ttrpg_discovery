@@ -660,7 +660,10 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
           onClick={resetConfirmModal}
         >
           <section
-            className="relative w-full max-w-2xl rounded-2xl border border-white/15 bg-slate-950 p-5 text-slate-100 shadow-[0_24px_56px_-24px_rgba(0,0,0,0.9)]"
+            className={[
+              "relative w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/15 bg-slate-950 p-5 text-slate-100 shadow-[0_24px_56px_-24px_rgba(0,0,0,0.9)]",
+              confirmStep === "existing" ? "h-[80vh]" : "max-h-[85vh]",
+            ].join(" ")}
             role="dialog"
             aria-modal="true"
             onClick={(event) => event.stopPropagation()}
@@ -712,12 +715,12 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
               ) : null}
 
               {confirmStep === "existing" ? (
-                <div className="space-y-3">
+                <div className="flex h-full min-h-0 flex-col gap-3">
                   <h2 className="text-lg font-bold uppercase tracking-[0.12em] text-amber-100">Existing Preferences Found</h2>
                   <textarea
                     readOnly
                     value={existingPreferenceText}
-                    className="h-64 w-full resize-none rounded-xl border border-white/20 bg-black/30 p-3 font-mono text-xs text-cyan-100"
+                    className="h-[70vh] w-full resize-none rounded-xl border border-white/20 bg-black/30 p-3 font-mono text-lg text-cyan-100"
                   />
 
                   {confirmError ? <p className="text-sm text-red-300">{confirmError}</p> : null}
@@ -726,9 +729,9 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
                     type="button"
                     onClick={handleReplaceExistingPreferences}
                     disabled={confirmLoading}
-                    className="inline-flex min-w-[220px] items-center justify-center rounded-lg border border-red-300/50 bg-red-400/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-red-100 transition hover:border-red-200/85 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex min-w-[220px] items-center justify-center rounded-lg border w-full border-red-300/50 bg-red-400/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-red-100 transition hover:border-red-200/85 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {confirmLoading ? "Replacing..." : "Replace Existing Preferences"}
+                    {confirmLoading ? "Replacing..." : "Replace This"}
                   </button>
                 </div>
               ) : null}

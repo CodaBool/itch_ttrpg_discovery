@@ -1,0 +1,20 @@
+name = 'itch-ttrpg-discovery-email'
+main = "email.js"
+compatibility_date = "2026-07-10"
+
+[triggers]
+crons = ["0 12 1 * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "itch-rpg-feed"
+migrations_dir = "../migrations"
+database_id = "9c508136-520e-4731-aba3-321d40cc13c6"
+
+[vars]
+NEWSLETTER_FROM_EMAIL = "indie-ttrpg-discovery@codabool.com"
+NEWSLETTER_FROM_NAME = "CodaBool Feed"
+EMAIL_WORKER_URL = "https://email.codabool.workers.dev"
+
+[observability.logs]
+enabled = false

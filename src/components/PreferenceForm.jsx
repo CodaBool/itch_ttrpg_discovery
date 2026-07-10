@@ -45,8 +45,6 @@ export default function PreferenceForm({
   onSystemFocusToggle,
   englishOnly = true,
   onEnglishOnlyChange,
-  excludeAiAssisted = true,
-  onExcludeAiAssistedChange,
   majorAwards = true,
   onMajorAwardsChange,
   addGameAssets = true,
@@ -77,18 +75,18 @@ export default function PreferenceForm({
               ].join(" ")}
             >
               <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 md:flex md:items-center md:gap-2">
                   <button
                     type="button"
                     onClick={() => onSystemFocusToggle?.(system.key)}
                     className={[
-                      "max-w-full cursor-pointer truncate text-left font-semibold uppercase tracking-[0.1em] transition",
+                      "max-w-full cursor-pointer truncate text-left font-semibold uppercase tracking-[0.1em] transition md:shrink-0",
                       isFocused ? "text-amber-100" : "text-slate-200 hover:text-amber-100",
                     ].join(" ")}
                   >
                     {system.label}
                   </button>
-                  <p className="mt-1 line-clamp-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">{getInterestPhrase(systemScores[system.key] ?? 0)}</p>
+                  <p className="mt-1 line-clamp-2 text-[10px] uppercase tracking-[0.08em] text-slate-400 md:mt-0 md:line-clamp-1 md:truncate">{getInterestPhrase(systemScores[system.key] ?? 0)}</p>
                 </div>
                 <span className={`shrink-0 text-xs font-semibold uppercase tracking-[0.1em] ${styles.valueClass}`}>{systemScores[system.key] ?? 0}</span>
               </div>
@@ -115,16 +113,6 @@ export default function PreferenceForm({
             className={`h-4 w-4 ${styles.accentClass}`}
           />
           <span className="font-semibold uppercase tracking-[0.12em]">English only</span>
-        </label>
-
-        <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
-          <input
-            type="checkbox"
-            checked={excludeAiAssisted}
-            onChange={(event) => onExcludeAiAssistedChange?.(event.target.checked)}
-            className={`h-4 w-4 ${styles.accentClass}`}
-          />
-          <span className="font-semibold uppercase tracking-[0.12em]">Exclude AI Assisted</span>
         </label>
 
         {includeNewsletterExtras ? (

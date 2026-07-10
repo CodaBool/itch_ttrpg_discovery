@@ -23,7 +23,7 @@ export function loadPreferenceDraft(defaultSystems) {
     systems: defaultSystems,
     majorAwards: true,
     englishOnly: true,
-    excludeAiAssisted: true,
+    minRatings: 1,
     addGameAssets: true,
     addToolsMiscGameMods: true,
     excludedCreators: [],
@@ -43,7 +43,9 @@ export function loadPreferenceDraft(defaultSystems) {
       systems: normalizeSystems(defaultSystems, parsed.systems),
       majorAwards: parsed.majorAwards !== false,
       englishOnly: parsed.englishOnly !== false,
-      excludeAiAssisted: parsed.excludeAiAssisted !== false,
+      minRatings: Number.isFinite(Number(parsed.minRatings))
+        ? Math.max(0, Math.min(10, Math.floor(Number(parsed.minRatings))))
+        : 1,
       addGameAssets: parsed.addGameAssets !== false,
       addToolsMiscGameMods: parsed.addToolsMiscGameMods !== false,
       excludedCreators: Array.isArray(parsed.excludedCreators)

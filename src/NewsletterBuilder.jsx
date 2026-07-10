@@ -37,7 +37,11 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
   const [systemScores, setSystemScores] = useState(draft.systems);
   const [majorAwards, setMajorAwards] = useState(draft.majorAwards);
   const [englishOnly, setEnglishOnly] = useState(draft.englishOnly);
-  const [excludeAiAssisted, setExcludeAiAssisted] = useState(draft.excludeAiAssisted);
+  const [minRatings, setMinRatings] = useState(() => {
+    const value = Number(draft.minRatings);
+    if (!Number.isFinite(value)) return 1;
+    return Math.max(0, Math.min(10, Math.floor(value)));
+  });
   const [addGameAssets, setAddGameAssets] = useState(draft.addGameAssets);
   const [addToolsMiscGameMods, setAddToolsMiscGameMods] = useState(draft.addToolsMiscGameMods);
   const [excludedCreators, setExcludedCreators] = useState(() => {
@@ -61,12 +65,12 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
       systems: systemScores,
       majorAwards,
       englishOnly,
-      excludeAiAssisted,
+      minRatings,
       addGameAssets,
       addToolsMiscGameMods,
       excludedCreators,
     });
-  }, [email, systemScores, majorAwards, englishOnly, excludeAiAssisted, addGameAssets, addToolsMiscGameMods, excludedCreators]);
+  }, [email, systemScores, majorAwards, englishOnly, minRatings, addGameAssets, addToolsMiscGameMods, excludedCreators]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -95,7 +99,7 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
           systems: systemScores,
           majorAwards,
           englishOnly,
-          excludeAiAssisted,
+          minRatings,
           addGameAssets,
           addToolsMiscGameMods,
           excludedCreators,
@@ -134,7 +138,7 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [systemScores, majorAwards, englishOnly, excludeAiAssisted, addGameAssets, addToolsMiscGameMods, excludedCreators]);
+  }, [systemScores, majorAwards, englishOnly, minRatings, addGameAssets, addToolsMiscGameMods, excludedCreators]);
 
   useEffect(() => {
     return () => {
@@ -160,7 +164,7 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
       systems: systemScores,
       majorAwards,
       englishOnly,
-      excludeAiAssisted,
+      minRatings,
       addGameAssets,
       addToolsMiscGameMods,
       excludedCreators,
@@ -302,8 +306,6 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
               onSystemScoreChange={updateSystemScore}
               englishOnly={englishOnly}
               onEnglishOnlyChange={setEnglishOnly}
-              excludeAiAssisted={excludeAiAssisted}
-              onExcludeAiAssistedChange={setExcludeAiAssisted}
               majorAwards={majorAwards}
               onMajorAwardsChange={setMajorAwards}
               addGameAssets={addGameAssets}
@@ -313,6 +315,22 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
               includeNewsletterExtras={true}
               theme="blue"
             />
+
+            <label className="block rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="font-semibold uppercase tracking-[0.12em]">Minimum rating for everything else</span>
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-cyan-100">{minRatings}</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={10}
+                step={1}
+                value={minRatings}
+                onChange={(event) => setMinRatings(Number(event.target.value) || 0)}
+                className="w-full accent-cyan-300"
+              />
+            </label>
 
             <div className="space-y-3">
               <div>
@@ -450,6 +468,7 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
                     <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">foundry-vtt</span>
                     <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">lancer</span>
                     <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">hexcrawl</span>
+                    <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">AI assisted</span>
                   </div>
                   <p className="text-lg text-slate-300 mt-10">The following are over represented </p>
                   <div>

@@ -19,55 +19,6 @@ const CATEGORY_ALIAS_BY_SLUG = {
     tools: ["tools", "misc", "game-mods"],
 };
 
-// Keep in sync with worker/src/index.js
-const PAIR_TAGS = [
-  "horror",
-  "body-horror",
-  "generator",
-  "tool",
-  "mystery",
-  "investigation",
-  "comedy",
-  "survival-horror",
-  "pbta",
-  "forged-in-the-dark",
-  "sci-fi",
-  "tabletop",
-  "one-page",
-  "zine",
-  "fanzine",
-  "supplement",
-  "cyborg",
-];
-
-const SOLO_TAGS = [
-  "one-shot",
-  "rules-lite",
-  "rules-light",
-  "micro-rpg",
-  "ttrpg",
-  "osr",
-  "liminal-horror",
-  "mothership",
-  "mothership-rpg",
-  "panic-engine",
-  "mork-borg",
-  "delta-green",
-  "call-of-cthulhu",
-  "triangle-agency",
-  "mausritter",
-  "cairn",
-  "into-the-odd",
-  "fist",
-  "pirate-borg",
-  "brindlewood",
-  "carved-from-brindlewood",
-  "electric-bastionland",
-  "cain",
-  "trophy-dark",
-  "public-access",
-];
-
 const SYSTEM_DEFINITIONS = [
     { key: "liminal-horror", label: "Liminal Horror", tags: ["liminal-horror"] },
     { key: "mothership", label: "Mothership", tags: ["mothership", "mothership-rpg", "panic-engine"] },
@@ -86,23 +37,13 @@ const SYSTEM_DEFINITIONS = [
     { key: "public-access", label: "Public Access", tags: ["public-access"] },
 ];
 
-const SYSTEM_TAGS = SYSTEM_DEFINITIONS.map((system) => system.key);
 const SYSTEM_FILTERS = SYSTEM_DEFINITIONS.map(({ key, label }) => ({ key, label }));
-
-const HIDDEN_ALIAS_TAGS = ["mothership-rpg", "panic-engine", "carved-from-brindlewood", "pirate-borg", "cyborg"];
-
-const ALL_TAGS = [...new Set([...PAIR_TAGS, ...SOLO_TAGS])];
-const NON_SYSTEM_TAGS = ALL_TAGS.filter(
-    (tag) => !SYSTEM_TAGS.includes(tag) && !HIDDEN_ALIAS_TAGS.includes(tag)
-);
 
 const STORAGE_KEYS = {
     category: "itch-feed:selected-category",
     system: "itch-feed:selected-system",
     focusedSystem: "itch-feed:focused-system",
-    tags: "itch-feed:selected-tags",
     hideNonEnglish: "itch-feed:hide-non-english",
-    hideAiAssisted: "itch-feed:hide-ai-assisted",
     minRatings: "itch-feed:min-ratings",
     hiddenUrls: "itch-feed:hidden-urls",
     blockedAuthors: "itch-feed:blocked-authors",
@@ -115,32 +56,8 @@ const SYSTEM_TAGS_BY_KEY = Object.fromEntries(
     SYSTEM_DEFINITIONS.map((system) => [system.key, system.tags])
 );
 
-const SYSTEM_MATCH_TAGS = new Set(
-    Object.values(SYSTEM_TAGS_BY_KEY)
-        .flat()
-        .map((tag) => String(tag || "").trim().toLowerCase())
-        .filter(Boolean)
-);
-
 const VIP_AUTHORS = ["goblinarchives", "tombloom", "massif-press", "claymorerpgs"];
 const HIDDEN_SOURCE_TERMS = ["ttrpg", "tabletop"];
-
-function loadStoredArray(key, fallback, allowedValues) {
-    if (typeof window === "undefined") return fallback;
-
-    try {
-        const raw = window.localStorage.getItem(key);
-        if (!raw) return fallback;
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return fallback;
-
-        const allowed = new Set(allowedValues);
-        const cleaned = parsed.filter((value) => allowed.has(value));
-        return cleaned.length ? cleaned : fallback;
-    } catch {
-        return fallback;
-    }
-}
 
 function loadStoredCategoryValue() {
     const allowed = CATEGORY_OPTIONS.map((option) => option.slug);
@@ -230,6 +147,13 @@ function toggleValue(list, value) {
 
 function getSystemMatchTags(systemKey) {
     return SYSTEM_TAGS_BY_KEY[systemKey] || [systemKey];
+}
+
+function matchedSystemKeysFromTags(tags) {
+    return Object.keys(SYSTEM_TAGS_BY_KEY).filter((systemKey) => {
+        const matchTags = getSystemMatchTags(systemKey);
+        return matchTags.some((tag) => tags.has(tag));
+    });
 }
 
 function readSourceTags(source) {
@@ -368,9 +292,6 @@ export default function App() {
     const [pendingSystemScores, setPendingSystemScores] = useState(draft.systems);
     const [systemScores, setSystemScores] = useState(draft.systems);
     const [focusedSystemKey, setFocusedSystemKey] = useState(() => loadStoredFocusedSystemValue());
-    const [selectedTags, setSelectedTags] = useState(() =>
-        loadStoredArray(STORAGE_KEYS.tags, NON_SYSTEM_TAGS, NON_SYSTEM_TAGS)
-    );
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [hiddenUrls, setHiddenUrls] = useState(() => loadStoredStringArray(STORAGE_KEYS.hiddenUrls));
     const [blockedAuthors, setBlockedAuthors] = useState(() => loadStoredStringArray(STORAGE_KEYS.blockedAuthors));
@@ -380,8 +301,14 @@ export default function App() {
     const [showBeyondYear, setShowBeyondYear] = useState(false);
     const [alwaysShowBeyondYear, setAlwaysShowBeyondYear] = useState(() => loadStoredBool(STORAGE_KEYS.alwaysShowBeyondYear, false));
     const [hideNonEnglish, setHideNonEnglish] = useState(draft.englishOnly);
-    const [hideAiAssisted, setHideAiAssisted] = useState(draft.excludeAiAssisted);
-    const [minRatings, setMinRatings] = useState(() => loadStoredNumber(STORAGE_KEYS.minRatings, 1, 0, 10));
+    const [minRatings, setMinRatings] = useState(() => {
+        const draftValue = Number(draft.minRatings);
+        if (Number.isFinite(draftValue)) {
+            return Math.max(0, Math.min(10, Math.floor(draftValue)));
+        }
+
+        return loadStoredNumber(STORAGE_KEYS.minRatings, 1, 0, 10);
+    });
 
     useEffect(() => {
         if (activePage !== "discover") return;
@@ -390,7 +317,12 @@ export default function App() {
         setPendingSystemScores(latest.systems);
         setSystemScores(latest.systems);
         setHideNonEnglish(latest.englishOnly);
-        setHideAiAssisted(latest.excludeAiAssisted);
+        const latestMinRatings = Number(latest.minRatings);
+        setMinRatings(
+            Number.isFinite(latestMinRatings)
+                ? Math.max(0, Math.min(10, Math.floor(latestMinRatings)))
+                : 1
+        );
         setBlockedAuthors(Array.isArray(latest.excludedCreators) ? latest.excludedCreators : []);
     }, [activePage, defaultSystems]);
 
@@ -404,36 +336,10 @@ export default function App() {
         return () => window.clearTimeout(timeoutId);
     }, [activePage, pendingSystemScores]);
 
-    const activeSystemKeys = useMemo(() => {
-        if (focusedSystemKey) return [focusedSystemKey];
-
-        return Object.entries(systemScores)
-            .filter(([, score]) => Number(score) > 0)
-            .map(([key]) => key);
-    }, [systemScores, focusedSystemKey]);
-
-    const blockedSystemKeys = useMemo(() => {
-        if (focusedSystemKey) return [];
-
-        return Object.entries(systemScores)
-            .filter(([, score]) => Number(score) <= 0)
-            .map(([key]) => key);
-    }, [systemScores, focusedSystemKey]);
-
-    useEffect(() => {
-        // Cleanup old localStorage values from earlier UI versions.
-        setSelectedTags((prev) => prev.filter((tag) => !HIDDEN_ALIAS_TAGS.includes(tag)));
-    }, []);
-
     useEffect(() => {
         if (typeof window === "undefined") return;
         window.localStorage.setItem(STORAGE_KEYS.category, JSON.stringify(selectedCategory));
     }, [selectedCategory]);
-
-    useEffect(() => {
-        if (typeof window === "undefined") return;
-        window.localStorage.setItem(STORAGE_KEYS.tags, JSON.stringify(selectedTags));
-    }, [selectedTags]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -452,11 +358,6 @@ export default function App() {
 
     useEffect(() => {
         if (typeof window === "undefined") return;
-        window.localStorage.setItem(STORAGE_KEYS.hideAiAssisted, JSON.stringify(hideAiAssisted));
-    }, [hideAiAssisted]);
-
-    useEffect(() => {
-        if (typeof window === "undefined") return;
         window.localStorage.setItem(STORAGE_KEYS.focusedSystem, JSON.stringify(focusedSystemKey));
     }, [focusedSystemKey]);
 
@@ -466,10 +367,10 @@ export default function App() {
             ...existingDraft,
             systems: systemScores,
             englishOnly: hideNonEnglish,
-            excludeAiAssisted: hideAiAssisted,
+            minRatings,
             excludedCreators: blockedAuthors,
         });
-    }, [defaultSystems, systemScores, hideNonEnglish, hideAiAssisted, blockedAuthors]);
+    }, [defaultSystems, systemScores, hideNonEnglish, minRatings, blockedAuthors]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -563,64 +464,39 @@ export default function App() {
 
             if (!categoryMatch) return false;
 
+            // 4. English-only gate.
             if (hideNonEnglish && item.language != null) return false;
 
-            if (hideAiAssisted && item.ai === "ai assisted") return false;
-
-            if (parseRatingCount(item) < minRatings) return false;
-
-            if (hiddenUrlSet.has(item.url)) return false;
-
+            // 6. Creator blocklist gate.
             const authorKey = normalizeAuthorKey(item.author);
             if (authorKey && blockedAuthorSet.has(authorKey)) return false;
 
+            // 7. Seen items gate (main only).
+            if (hiddenUrlSet.has(item.url)) return false;
+
             const tags = itemTagSet(item);
-            const hasAnySystemTag = Array.from(SYSTEM_MATCH_TAGS).some((tag) => tags.has(tag));
+            const matchedSystemKeys = matchedSystemKeysFromTags(tags);
+            const hasAnySystemTag = matchedSystemKeys.length > 0;
 
+            // 5. Focused system gate (main only).
             if (focusedSystemKey) {
-                const matchTags = getSystemMatchTags(focusedSystemKey);
-                const tagMatched = matchTags.some((tag) => tags.has(tag));
-                if (!tagMatched) return false;
+                if (!matchedSystemKeys.includes(focusedSystemKey)) return false;
+            }
 
-                const level = Math.max(0, Math.min(5, Math.round(Number(systemScores[focusedSystemKey]) || 0)));
-                if (level < 5 && !meetsSystemLevelRequirement(item, level)) return false;
-
+            // 2. System requirement gate.
+            if (hasAnySystemTag) {
+                for (const systemKey of matchedSystemKeys) {
+                    const level = Math.max(0, Math.min(5, Math.round(Number(systemScores[systemKey]) || 0)));
+                    if (level <= 0) return false;
+                    if (level < 5 && !meetsSystemLevelRequirement(item, level)) return false;
+                }
                 return true;
             }
 
-            if (activeSystemKeys.length > 0 && hasAnySystemTag) {
-                const matched = activeSystemKeys.some((systemKey) => {
-                    const matchTags = getSystemMatchTags(systemKey);
-                    const tagMatched = matchTags.some((tag) => tags.has(tag));
-                    if (!tagMatched) return false;
-
-                    const level = Math.max(0, Math.min(5, Math.round(Number(systemScores[systemKey]) || 0)));
-                    if (level >= 5) return true;
-
-                    return meetsSystemLevelRequirement(item, level);
-                });
-
-                if (matched) {
-                    // Positive-interest match wins, even if the item also has other system tags.
-                    return true;
-                }
-            }
-
-            if (blockedSystemKeys.length > 0 && hasAnySystemTag) {
-                const hasBlockedSystemTag = blockedSystemKeys.some((systemKey) => {
-                    const matchTags = getSystemMatchTags(systemKey);
-                    return matchTags.some((tag) => tags.has(tag));
-                });
-
-                if (hasBlockedSystemTag) return false;
-            }
-
-            if (activeSystemKeys.length > 0 && hasAnySystemTag) return false;
-
-            if (selectedTags.length === 0) return true;
-            return selectedTags.some((tag) => tags.has(tag));
+            // 3. Non-system gate uses the everything-else minimum rating.
+            return parseRatingCount(item) >= minRatings;
         });
-    }, [items, selectedCategory, focusedSystemKey, activeSystemKeys, blockedSystemKeys, systemScores, selectedTags, hiddenUrlSet, blockedAuthorSet, hideNonEnglish, hideAiAssisted, minRatings]);
+    }, [items, selectedCategory, focusedSystemKey, systemScores, hiddenUrlSet, blockedAuthorSet, hideNonEnglish, minRatings]);
 
     function runItemAction(item, mode) {
         const animationType = mode === "block-author" ? "cut" : "stamp";
@@ -748,7 +624,7 @@ export default function App() {
 
     useEffect(() => {
         setShowBeyondYear(false);
-    }, [selectedCategory, systemScores, selectedTags]);
+    }, [selectedCategory, systemScores, minRatings]);
 
     if (activePage === "jams") {
         return <Jams onBack={() => setActivePage("discover")} />;
@@ -849,8 +725,6 @@ export default function App() {
                                 }}
                                 englishOnly={hideNonEnglish}
                                 onEnglishOnlyChange={setHideNonEnglish}
-                                excludeAiAssisted={hideAiAssisted}
-                                onExcludeAiAssistedChange={setHideAiAssisted}
                                 includeNewsletterExtras={false}
                                 theme="orange"
                             />
@@ -859,7 +733,7 @@ export default function App() {
 
                             <label className="block rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
                                 <div className="mb-2 flex items-center justify-between gap-3">
-                                    <span className="font-semibold uppercase tracking-[0.12em]">Global minimum number of ratings</span>
+                                    <span className="font-semibold uppercase tracking-[0.12em]">Minimum rating for everything else</span>
                                     <span className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-200">{minRatings}</span>
                                 </div>
                                 <input

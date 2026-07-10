@@ -9,14 +9,6 @@ function formatDate(value) {
   }).format(d);
 }
 
-function formatSourceTerm(term) {
-  const value = (term || "").trim();
-  if (!value) return "unknown";
-
-  const normalized = value.startsWith("ttrpg+") ? value.slice("ttrpg+".length) : value;
-  return normalized.replace(/-/g, " ");
-}
-
 function readSourceTags(source) {
   if (!source || typeof source !== "object") return [];
 
@@ -32,6 +24,19 @@ function readSourceTags(source) {
   }
 
   return [];
+}
+
+function makeSourceChipLabel(source, hiddenTagSet, hiddenTermSet) {
+  const tags = readSourceTags(source).filter(
+    (tag) => !hiddenTagSet.has(tag) && !hiddenTermSet.has(tag)
+  );
+
+  if (tags.length === 0) return "";
+
+  return tags
+    .map((tag) => String(tag || "").trim().replace(/-/g, " "))
+    .filter(Boolean)
+    .join(" + ");
 }
 
 function formatAuthorName(author) {
@@ -192,21 +197,19 @@ export default function ItemCard({
 }) {
   const hiddenTagSet = new Set(hiddenSourceTags.map((tag) => String(tag || "").toLowerCase()));
   const hiddenTermSet = new Set(
-    hiddenSourceTerms
+    [...hiddenSourceTerms, "ttrpg", "tabletop"]
       .map((term) => String(term || "").trim().toLowerCase())
       .filter(Boolean)
   );
   const sourceChips = item.source
-    .filter((source) => {
-      if (!hiddenTagSet.size) return true;
-      const tags = readSourceTags(source);
-      return !tags.some((tag) => hiddenTagSet.has(tag));
+    .map((source) => {
+      const label = makeSourceChipLabel(source, hiddenTagSet, hiddenTermSet);
+      return {
+        key: `${source.category_slug || "unknown"}-${source.term || label}`,
+        label,
+      };
     })
-    .filter((source) => {
-      if (!hiddenTermSet.size) return true;
-      const displayTerm = formatSourceTerm(source.term).trim().toLowerCase();
-      return !hiddenTermSet.has(displayTerm);
-    })
+    .filter((chip) => Boolean(chip.label))
     .slice(0, 4);
   const toolModeEnabled = interactionMode !== "none";
   const isFree = isFreePrice(item.price);
@@ -325,10 +328,10 @@ export default function ItemCard({
       <div className="mt-2.5 flex flex-wrap gap-1.5 opacity-100">
         {sourceChips.map((s) => (
           <span
-            key={`${s.category_slug}-${s.term}`}
+            key={s.key}
             className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-slate-200"
           >
-            {formatSourceTerm(s.term)}
+            {s.label}
           </span>
         ))}
         {showNoAiBadge ? (

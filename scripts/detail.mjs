@@ -10,6 +10,16 @@ import {
   toInt,
 } from "../worker/detail/shared.js";
 
+const DETAIL_EXCLUDED_TAGS = new Set([
+  "vtt-battlemaps",
+  "foundry-vtt",
+  "solo-rpg",
+  "solo",
+  "solo-ttrpg",
+  "dnd5e",
+  "dungeons-and-dragsons",
+]);
+
 function mustEnv(name) {
   const value = process.env[name];
   if (!value || !String(value).trim()) {
@@ -68,6 +78,14 @@ export async function scrapeDetail(page, url) {
     const noAiAnchor = document.querySelector('a[href="https://itch.io/physical-games/tag-no-ai"]');
     const aiAssistedAnchor = document.querySelector('a[href="https://itch.io/game-assets/ai-assisted"]');
 
+    const sourceTags = Array.from(document.querySelectorAll('a[href*="/tag-"]'))
+      .map((anchor) => {
+        const href = anchor.getAttribute("href") || "";
+        const match = href.match(/\/tag-([^/?#]+)/i);
+        return match ? String(match[1] || "").trim().toLowerCase() : "";
+      })
+      .filter(Boolean);
+
     const pageTitle =
       document.querySelector("h1.game_title")?.textContent ||
       document.querySelector("h1")?.textContent ||
@@ -89,6 +107,7 @@ export async function scrapeDetail(page, url) {
       topicCount,
       commentCount,
       ai: aiAssistedAnchor ? "ai assisted" : noAiAnchor ? "no ai" : null,
+      sourceTags,
       languageText,
     };
   });
@@ -116,7 +135,7 @@ export function detectLanguageIso3(rawText) {
 
   // If English is also very plausible, treat as English to avoid false non-English flags.
   if (Number.isFinite(englishScore)) {
-    const ENGLISH_CONFIDENT = 0.95;
+    const ENGLISH_CONFIDENT = 0.93;
     const MIN_MARGIN_OVER_ENGLISH = 0.08;
 
     if (englishScore >= ENGLISH_CONFIDENT) return null;
@@ -253,6 +272,8 @@ export async function runParallelDetailScrape() {
     seen: 0,
     updated: 0,
     removedLowRating: 0,
+    removedAiAssisted: 0,
+    removedExcludedTag: 0,
     failed: 0,
     skipped: 0,
     removed404: 0,
@@ -287,6 +308,45 @@ export async function runParallelDetailScrape() {
           const engagement = metrics.engagement;
           const ai = metrics.ai;
           const language = detectLanguageIso3(scraped.languageText);
+          const sourceTags = Array.isArray(scraped.sourceTags) ? scraped.sourceTags : [];
+
+          const matchedExcludedTag = sourceTags.find((tag) =>
+            DETAIL_EXCLUDED_TAGS.has(String(tag || "").trim().toLowerCase())
+          );
+
+          if (matchedExcludedTag) {
+            if (!dryRun) {
+              await d1.execute("DELETE FROM items WHERE url = ?", [url]);
+            }
+
+            counters.removedExcludedTag += 1;
+            console.log(
+              `[worker-${workerId}] removed ${url} due to excluded tag (${matchedExcludedTag})`
+            );
+            counters.seen += 1;
+
+            if (cooldownMs > 0) {
+              await sleep(cooldownMs);
+            }
+
+            continue;
+          }
+
+          if (String(ai || "").trim().toLowerCase() === "ai assisted") {
+            if (!dryRun) {
+              await d1.execute("DELETE FROM items WHERE url = ?", [url]);
+            }
+
+            counters.removedAiAssisted += 1;
+            console.log(`[worker-${workerId}] removed ${url} due to ai assisted flag`);
+            counters.seen += 1;
+
+            if (cooldownMs > 0) {
+              await sleep(cooldownMs);
+            }
+
+            continue;
+          }
 
           if (shouldRemoveForLowRating(rating)) {
             if (!dryRun) {
@@ -380,6 +440,8 @@ export async function runParallelDetailScrape() {
   console.log("\n=== Detail Summary ===");
   console.log(`Rows seen: ${counters.seen}`);
   console.log(`Rows updated: ${counters.updated}`);
+  console.log(`Rows removed due to excluded tags: ${dryRun ? 0 : counters.removedExcludedTag}`);
+  console.log(`Rows removed due to ai assisted: ${dryRun ? 0 : counters.removedAiAssisted}`);
   console.log(`Rows removed due to low rating: ${dryRun ? 0 : counters.removedLowRating}`);
   console.log(`Rows failed: ${counters.failed}`);
   console.log(`Rows skipped (no url): ${counters.skipped}`);

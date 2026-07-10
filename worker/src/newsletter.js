@@ -72,6 +72,13 @@ function sourceTagSet(sourceArray) {
   return tags;
 }
 
+function matchedSystemKeysFromTags(tags) {
+  return Object.keys(SYSTEM_TAGS_BY_KEY).filter((systemKey) => {
+    const matchTags = SYSTEM_TAGS_BY_KEY[systemKey] || [systemKey];
+    return matchTags.some((tag) => tags.has(String(tag || "").trim().toLowerCase()));
+  });
+}
+
 function itemDate(item) {
   const raw = item.publish_date || item.update_date || item.first_seen_at || item.updated_at || "";
   const parsed = new Date(raw);
@@ -93,6 +100,11 @@ function ratingMetrics(rawRating) {
     average: Number.isFinite(average) ? average : 0,
     count: Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0,
   };
+}
+
+function parseRatingCount(item) {
+  const { count } = ratingMetrics(item.rating);
+  return count;
 }
 
 function positiveRatingCount(item) {
@@ -190,6 +202,7 @@ function formatDate(raw) {
 }
 
 function sourceTagsForDisplay(sourceArray) {
+  const hidden = new Set(["ttrpg", "tabletop"]);
   const tags = [];
   const seen = new Set();
 
@@ -197,7 +210,7 @@ function sourceTagsForDisplay(sourceArray) {
     if (Array.isArray(source?.tags)) {
       source.tags.forEach((tag) => {
         const normalized = String(tag || "").trim().toLowerCase();
-        if (!normalized || seen.has(normalized)) return;
+        if (!normalized || hidden.has(normalized) || seen.has(normalized)) return;
         seen.add(normalized);
         tags.push(normalized);
       });
@@ -210,6 +223,7 @@ function sourceTagsForDisplay(sourceArray) {
         .map((tag) => tag.trim().toLowerCase())
         .filter(Boolean)
         .forEach((tag) => {
+          if (hidden.has(tag)) return;
           if (seen.has(tag)) return;
           seen.add(tag);
           tags.push(tag);
@@ -223,7 +237,9 @@ function sourceTagsForDisplay(sourceArray) {
 export function filterNewsletterItems(items, rawPreference = {}, now = new Date()) {
   const preference = {
     englishOnly: rawPreference.englishOnly !== false,
-    excludeAiAssisted: rawPreference.excludeAiAssisted !== false,
+    minRatings: Number.isFinite(Number(rawPreference.minRatings))
+      ? Math.max(0, Math.min(10, Math.floor(Number(rawPreference.minRatings))))
+      : 1,
     addGameAssets: rawPreference.addGameAssets !== false,
     addToolsMiscGameMods: rawPreference.addToolsMiscGameMods !== false,
     excludedCreators: Array.isArray(rawPreference.excludedCreators)
@@ -235,7 +251,6 @@ export function filterNewsletterItems(items, rawPreference = {}, now = new Date(
   const cutoffMs = now.getTime() - NEWSLETTER_WINDOW_DAYS * DAY_MS;
   const excludedCreatorSet = new Set(preference.excludedCreators);
   const allowedCategories = selectedCategorySlugs(preference);
-  const activeSystems = Object.entries(preference.systemScores).filter(([, level]) => level > 0);
 
   const filtered = items.filter((item) => {
     const sourceArray = parseSourceArray(item.source);
@@ -248,15 +263,24 @@ export function filterNewsletterItems(items, rawPreference = {}, now = new Date(
     if (!categoryMatch) return false;
 
     if (preference.englishOnly && item.language != null) return false;
-    if (preference.excludeAiAssisted && String(item.ai || "").trim().toLowerCase() === "ai assisted") return false;
 
     const authorKey = normalizeAuthor(item.author);
     if (authorKey && excludedCreatorSet.has(authorKey)) return false;
 
-    if (activeSystems.length === 0) return true;
-
     const tags = sourceTagSet(sourceArray);
-    return activeSystems.some(([systemKey, level]) => matchesSystemRule(item, systemKey, level, tags));
+    const matchedSystemKeys = matchedSystemKeysFromTags(tags);
+    const hasAnySystemTag = matchedSystemKeys.length > 0;
+
+    if (hasAnySystemTag) {
+      for (const systemKey of matchedSystemKeys) {
+        const level = coerceLevel(preference.systemScores[systemKey]);
+        if (level <= 0) return false;
+        if (!matchesSystemRule(item, systemKey, level, tags)) return false;
+      }
+      return true;
+    }
+
+    return parseRatingCount(item) >= preference.minRatings;
   });
 
   return filtered.sort((a, b) => {

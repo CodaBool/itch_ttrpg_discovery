@@ -74,7 +74,7 @@ async function loadSubscriptionByEmail(env, email) {
 }
 
 async function sendEmail(env, toEmail, subject, html) {
-  const fromName = String("Itch TTRPG Discovery Newsletter")
+  const fromName = String("indie-ttrpg-discovery@codabool.com")
   const deliverySecret = String(env.EMAIL_WORKER_SECRET)
   const deliveryUrlBase = "https://email.codabool.workers.dev"
 

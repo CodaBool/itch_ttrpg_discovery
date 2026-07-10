@@ -187,13 +187,24 @@ async function handleManualSend(request, env) {
 
   const url = new URL(request.url);
   const email = normalizeEmail(body?.email ?? url.searchParams.get("email"));
-  const secret = String(url.searchParams.get("secret"))
+  const providedSecret = String(url.searchParams.get("secret") || "").trim();
+  const configuredSecret = String(env?.EMAIL_WORKER_SECRET || "").trim();
+
+  console.log("[email-worker] manual send request", {
+    method: request.method,
+    has_body: body != null,
+    email,
+    has_secret: Boolean(providedSecret),
+    has_configured_secret: Boolean(configuredSecret),
+  });
 
   if (!email) {
+    console.log("[email-worker] manual send rejected", { reason: "missing_email" });
     return json({ error: "email is required" }, { status: 400 });
   }
 
-  if (secret !== env.EMAIL_WORKER_SECRET) {
+  if (providedSecret !== configuredSecret) {
+    console.log("[email-worker] manual send rejected", { reason: "unauthorized" });
     return json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -202,14 +213,30 @@ async function handleManualSend(request, env) {
     loadSubscriptionByEmail(env, email),
   ]);
 
+  console.log("[email-worker] manual send loaded data", {
+    items_count: items.length,
+    subscription_found: Boolean(subscription),
+    email,
+  });
+
   if (!subscription) {
+    console.log("[email-worker] manual send rejected", { reason: "subscription_not_found", email });
     return json({ error: "No subscription found for email" }, { status: 404 });
   }
 
   try {
     const result = await sendForSubscription(env, items, subscription, new Date());
+    console.log("[email-worker] manual send success", {
+      email,
+      items_count: result.items_count,
+    });
     return json({ ok: true, ...result });
   } catch (error) {
+    console.log("[email-worker] manual send failed", {
+      email,
+      error: error instanceof Error ? error.message : "unknown error",
+      stack: error instanceof Error ? error.stack : null,
+    });
     return json({
       ok: false,
       error: error instanceof Error ? error.message : "unknown error",

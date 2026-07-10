@@ -93,9 +93,27 @@ async function sendEmail(env, toEmail, subject, html) {
     secret: deliverySecret,
   }).toString();
 
+  console.log("[email-worker] outbound request", {
+    endpoint: deliveryUrlBase,
+    query: {
+      subject,
+      to: toEmail,
+      name: recipientName,
+      from: fromName,
+      secret: "[redacted]",
+    },
+    body_bytes: String(html || "").length,
+  });
+
   const response = await fetch(`${deliveryUrlBase}/?${urlParams}`, {
     method: "POST",
     body: String(html || ""),
+  });
+
+  console.log("[email-worker] outbound response", {
+    status: response.status,
+    ok: response.ok,
+    recipient: toEmail,
   });
 
   if (!response.ok) {

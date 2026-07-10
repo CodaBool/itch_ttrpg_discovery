@@ -131,6 +131,9 @@ async function sendForSubscription(env, items, subscription, now = new Date()) {
     title: preference.title || "Your Indie TTRPG Digest",
   }, now);
 
+  console.log('lets see that html')
+  console.log(preview.html)
+
   await sendEmail(env, email, buildSubject(now), preview.html);
 
   return {

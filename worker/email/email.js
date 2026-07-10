@@ -51,6 +51,27 @@ function buildSubject(now = new Date()) {
   return `Your Indie TTRPG Digest - ${month}`;
 }
 
+function appendUnsubscribeFooter(htmlBody, email) {
+  const normalizedEmail = normalizeEmail(email);
+  const encodedEmail = encodeURIComponent(normalizedEmail);
+  const unsubscribeUrl = `https://itch-ttrpg-discovery-email.codabool.workers.dev/?email=${encodedEmail}`;
+
+  const footer = `
+    <div style="margin: 28px auto 0 auto; max-width: 760px; padding: 14px 12px 0 12px; text-align: center; font-family: Arial, sans-serif;">
+      <a href="${unsubscribeUrl}" style="display:inline-block; border:1px solid #cbd5e1; border-radius:10px; padding:10px 14px; text-decoration:none; color:#334155; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;">
+        Unsubscribe
+      </a>
+    </div>
+  `;
+
+  const body = String(htmlBody || "");
+  if (body.includes("</body>")) {
+    return body.replace("</body>", `${footer}\n</body>`);
+  }
+
+  return `${body}${footer}`;
+}
+
 async function loadItems(env) {
   const rows = await env.DB.prepare(
     `SELECT
@@ -132,7 +153,8 @@ async function sendForSubscription(env, items, subscription, now = new Date()) {
     title: preference.title || "Your Indie TTRPG Digest",
   }, now);
 
-  await sendEmail(env, email, buildSubject(now), preview.html);
+  const htmlWithUnsubscribe = appendUnsubscribeFooter(preview.html, email);
+  await sendEmail(env, email, buildSubject(now), htmlWithUnsubscribe);
 
   return {
     email,

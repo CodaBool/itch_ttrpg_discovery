@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const STORAGE_KEYS = {
   blockedAuthors: "itch-feed:blocked-authors",
@@ -148,6 +148,12 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
   const [previewCount, setPreviewCount] = useState(0);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [confirmStep, setConfirmStep] = useState("notice");
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [confirmError, setConfirmError] = useState("");
+  const [existingPreferenceText, setExistingPreferenceText] = useState("");
+  const previewAbortRef = useRef(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -171,54 +177,76 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
     window.localStorage.setItem(STORAGE_KEYS.blockedAuthors, JSON.stringify(excludedCreators));
   }, [excludedCreators]);
 
+  async function runPreviewFetch() {
+    if (previewAbortRef.current) {
+      previewAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    previewAbortRef.current = controller;
+
+    setPreviewLoading(true);
+    setPreviewError("");
+
+    try {
+      const response = await fetch(`${API_BASE}/api/newsletter/preview`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          title: "Your Indie TTRPG Digest",
+          systems: systemScores,
+          majorAwards,
+          englishOnly,
+          excludeAiAssisted,
+          addGameAssets,
+          addToolsMiscGameMods,
+          excludedCreators,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Newsletter preview failed (${response.status})`);
+      }
+
+      const payload = await response.json();
+
+      if (previewAbortRef.current === controller) {
+        setPreviewHtml(String(payload.html || ""));
+        setPreviewCount(Number(payload.count || 0));
+      }
+    } catch (error) {
+      if (error?.name !== "AbortError" && previewAbortRef.current === controller) {
+        setPreviewError(error?.message || "Failed to load newsletter preview.");
+      }
+    } finally {
+      if (previewAbortRef.current === controller) {
+        setPreviewLoading(false);
+      }
+    }
+  }
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(async () => {
-      setPreviewLoading(true);
-      setPreviewError("");
-
-      try {
-        const response = await fetch(`${API_BASE}/api/newsletter/preview`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            title: "Your Indie TTRPG Digest",
-            systems: systemScores,
-            majorAwards,
-            englishOnly,
-            excludeAiAssisted,
-            addGameAssets,
-            addToolsMiscGameMods,
-            excludedCreators,
-          }),
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Newsletter preview failed (${response.status})`);
-        }
-
-        const payload = await response.json();
-        setPreviewHtml(String(payload.html || ""));
-        setPreviewCount(Number(payload.count || 0));
-      } catch (error) {
-        if (error?.name !== "AbortError") {
-          setPreviewError(error?.message || "Failed to load newsletter preview.");
-        }
-      } finally {
-        setPreviewLoading(false);
-      }
+    const timeoutId = window.setTimeout(() => {
+      runPreviewFetch();
     }, 5000);
 
     return () => {
-      controller.abort();
       window.clearTimeout(timeoutId);
     };
   }, [systemScores, majorAwards, englishOnly, excludeAiAssisted, addGameAssets, addToolsMiscGameMods, excludedCreators]);
+
+  useEffect(() => {
+    return () => {
+      if (previewAbortRef.current) {
+        previewAbortRef.current.abort();
+      }
+    };
+  }, []);
 
   function updateSystemScore(systemKey, value) {
     setSystemScores((prev) => ({
@@ -241,6 +269,108 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
 
   function removeCreator(name) {
     setExcludedCreators((prev) => prev.filter((entry) => entry !== name));
+  }
+
+  function currentPreferencePayload() {
+    return {
+      systems: systemScores,
+      majorAwards,
+      englishOnly,
+      excludeAiAssisted,
+      addGameAssets,
+      addToolsMiscGameMods,
+      excludedCreators,
+    };
+  }
+
+  function resetConfirmModal() {
+    setIsConfirmOpen(false);
+    setConfirmStep("notice");
+    setConfirmError("");
+    setConfirmLoading(false);
+    setExistingPreferenceText("");
+  }
+
+  function openLooksGoodModal() {
+    setIsConfirmOpen(true);
+    setConfirmStep("notice");
+    setConfirmError("");
+    setConfirmLoading(false);
+    setExistingPreferenceText("");
+  }
+
+  async function savePreferences() {
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      setConfirmError("Email is required before saving preferences.");
+      return false;
+    }
+
+    const response = await fetch(`${API_BASE}/api/newsletter/preferences`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        email: normalizedEmail,
+        preference: currentPreferencePayload(),
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Save failed (${response.status})`);
+    }
+
+    return true;
+  }
+
+  async function handleAcknowledgeBias() {
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      setConfirmError("Please enter an email first.");
+      return;
+    }
+
+    setConfirmLoading(true);
+    setConfirmError("");
+
+    try {
+      const checkResponse = await fetch(`${API_BASE}/api/newsletter/preferences?email=${encodeURIComponent(normalizedEmail)}`);
+      if (!checkResponse.ok) {
+        throw new Error(`Check failed (${checkResponse.status})`);
+      }
+
+      const checkPayload = await checkResponse.json();
+
+      if (checkPayload.exists) {
+        setExistingPreferenceText(JSON.stringify(checkPayload.preference_json || {}, null, 2));
+        setConfirmStep("existing");
+        return;
+      }
+
+      await savePreferences();
+      setConfirmStep("saved");
+    } catch (error) {
+      setConfirmError(error?.message || "Unable to continue.");
+    } finally {
+      setConfirmLoading(false);
+    }
+  }
+
+  async function handleReplaceExistingPreferences() {
+    setConfirmLoading(true);
+    setConfirmError("");
+
+    try {
+      await savePreferences();
+      setConfirmStep("saved");
+    } catch (error) {
+      setConfirmError(error?.message || "Unable to replace preferences.");
+    } finally {
+      setConfirmLoading(false);
+    }
   }
 
   const topSystems = useMemo(() => {
@@ -432,7 +562,20 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
                     <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-400/70" />
                     <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-400/70" />
                   </div>
-                  <span>Email Preview</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={runPreviewFetch}
+                      disabled={previewLoading}
+                      className="inline-flex h-6 min-w-[92px] items-center justify-center rounded border border-black/20 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-700 transition hover:border-black/35 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {previewLoading ? (
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" aria-hidden="true" />
+                      ) : (
+                        "Regenerate Preview"
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="px-5 py-4 md:px-7">
@@ -496,10 +639,117 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
                   </div>
                 </div>
               </section>
+
             </div>
           </form>
         </section>
+
+        <button
+          type="button"
+          onClick={openLooksGoodModal}
+          className="mb-[20vh] mt-[12vh] inline-flex w-full cursor-pointer items-center justify-center rounded-xl border border-emerald-200/45 bg-emerald-300/15 px-5 py-4 text-base font-black uppercase tracking-[0.14em] text-emerald-100 transition hover:border-emerald-200/80"
+        >
+          Looks Good
+        </button>
       </section>
+
+      {isConfirmOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
+          role="presentation"
+          onClick={resetConfirmModal}
+        >
+          <section
+            className="relative w-full max-w-2xl rounded-2xl border border-white/15 bg-slate-950 p-5 text-slate-100 shadow-[0_24px_56px_-24px_rgba(0,0,0,0.9)]"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={resetConfirmModal}
+              className="absolute right-[1em] top-[1em] inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/25 bg-slate-900 text-slate-200 transition hover:border-white/50"
+              aria-label="Close dialog"
+            >
+              x
+            </button>
+
+            <div>
+              {confirmStep === "notice" ? (
+                <div className="space-y-3">
+                  <h2 className="text-lg font-bold uppercase tracking-[0.12em] text-cyan-100">Mind the Gap</h2>
+                  <p className="text-lg text-slate-200">I made this project for myself</p>
+                   <p className="text-lg text-slate-200 mt-2">The following are under represented</p>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">solo</span>
+                    <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">larp</span>
+                    <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">D&amp;D</span>
+                    <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">Pathfinder</span>
+                    <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">lyric games</span>
+                    <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">diceless</span>
+                    <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">gm-less</span>
+                    <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">vtt</span>
+                    <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">foundry-vtt</span>
+                    <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">lancer</span>
+                    <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">hexcrawl</span>
+                  </div>
+                  <p className="text-lg text-slate-300 mt-10">The following are over represented </p>
+                  <div>
+                  <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">horror</span>
+                  </div>
+
+                  {confirmError ? <p className="text-sm text-red-300">{confirmError}</p> : null}
+
+                  <button
+                    type="button"
+                    onClick={handleAcknowledgeBias}
+                    disabled={confirmLoading}
+                    className="inline-flex min-w-[140px] items-center justify-center rounded-lg border border-cyan-200/45 bg-cyan-300/12 px-4 py-2 mt-10 w-full text-xs font-semibold uppercase tracking-[0.12em] text-cyan-100 transition hover:border-cyan-200/75 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {confirmLoading ? "Checking..." : "Acknowledge"}
+                  </button>
+                </div>
+              ) : null}
+
+              {confirmStep === "existing" ? (
+                <div className="space-y-3">
+                  <h2 className="text-lg font-bold uppercase tracking-[0.12em] text-amber-100">Existing Preferences Found</h2>
+                  <textarea
+                    readOnly
+                    value={existingPreferenceText}
+                    className="h-64 w-full resize-none rounded-xl border border-white/20 bg-black/30 p-3 font-mono text-xs text-cyan-100"
+                  />
+
+                  {confirmError ? <p className="text-sm text-red-300">{confirmError}</p> : null}
+
+                  <button
+                    type="button"
+                    onClick={handleReplaceExistingPreferences}
+                    disabled={confirmLoading}
+                    className="inline-flex min-w-[220px] items-center justify-center rounded-lg border border-red-300/50 bg-red-400/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-red-100 transition hover:border-red-200/85 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {confirmLoading ? "Replacing..." : "Replace Existing Preferences"}
+                  </button>
+                </div>
+              ) : null}
+
+              {confirmStep === "saved" ? (
+                <div className="space-y-3">
+                  <h2 className="text-lg font-bold uppercase tracking-[0.12em] text-emerald-100">Preferences Saved</h2>
+                  <p className="text-sm text-slate-200">Your newsletter preferences were saved for this email.</p>
+                  <button
+                    type="button"
+                    onClick={resetConfirmModal}
+                    className="inline-flex min-w-[140px] items-center justify-center rounded-lg border border-emerald-200/50 bg-emerald-300/15 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-100 transition hover:border-emerald-200/80"
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

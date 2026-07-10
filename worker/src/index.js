@@ -763,6 +763,88 @@ function listMetadata() {
   });
 }
 
+function normalizeEmailAddress(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function getNewsletterPreference(request, env) {
+  const url = new URL(request.url);
+  const email = normalizeEmailAddress(url.searchParams.get("email"));
+
+  if (!email) {
+    return json({ error: "email is required" }, { status: 400 });
+  }
+
+  const row = await env.DB.prepare(
+    `SELECT email, preference_json, created_at, updated_at
+     FROM newsletter_subscriptions
+     WHERE email = ?`
+  )
+    .bind(email)
+    .first();
+
+  if (!row) {
+    return json({ exists: false });
+  }
+
+  let parsedPreference = null;
+  try {
+    parsedPreference = JSON.parse(String(row.preference_json || "{}"));
+  } catch {
+    parsedPreference = null;
+  }
+
+  return json({
+    exists: true,
+    email: row.email,
+    preference_json: parsedPreference,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  });
+}
+
+async function upsertNewsletterPreference(request, env) {
+  let body = null;
+  try {
+    body = await request.json();
+  } catch {
+    body = null;
+  }
+
+  const email = normalizeEmailAddress(body?.email);
+  const preference = body?.preference && typeof body.preference === "object" ? body.preference : null;
+
+  if (!email) {
+    return json({ error: "email is required" }, { status: 400 });
+  }
+
+  if (!preference) {
+    return json({ error: "preference is required" }, { status: 400 });
+  }
+
+  const existing = await env.DB.prepare(
+    `SELECT email FROM newsletter_subscriptions WHERE email = ?`
+  )
+    .bind(email)
+    .first();
+
+  await env.DB.prepare(
+    `INSERT INTO newsletter_subscriptions (email, preference_json, created_at, updated_at)
+     VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT(email) DO UPDATE SET
+       preference_json = excluded.preference_json,
+       updated_at = CURRENT_TIMESTAMP`
+  )
+    .bind(email, JSON.stringify(preference))
+    .run();
+
+  return json({
+    ok: true,
+    email,
+    replaced: Boolean(existing),
+  });
+}
+
 async function newsletterPreview(request, env) {
   let body = null;
   try {
@@ -875,6 +957,14 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/api/newsletter/preview") {
       return newsletterPreview(request, env);
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/newsletter/preferences") {
+      return getNewsletterPreference(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/newsletter/preferences") {
+      return upsertNewsletterPreference(request, env);
     }
 
     if (request.method === "GET" && url.pathname === "/api/admin/searches") {

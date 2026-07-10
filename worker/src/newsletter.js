@@ -280,7 +280,7 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
       const description = String(item.description || "No description available.").trim();
       const authorText = escapeHtml(item.author || "unknown");
       const authorLink = item.author_url
-        ? `<a href="${escapeHtml(item.author_url)}" style="color: #0369a1; text-decoration: none;">${authorText}</a>`
+        ? `<a href="${escapeHtml(item.author_url)}" target="_blank" rel="noopener noreferrer" style="color: #0369a1; text-decoration: none;">${authorText}</a>`
         : authorText;
 
       return `

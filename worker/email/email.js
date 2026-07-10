@@ -74,9 +74,9 @@ async function loadSubscriptionByEmail(env, email) {
 }
 
 async function sendEmail(env, toEmail, subject, html) {
-  const fromName = String("indie-ttrpg-discovery@codabool.com")
-  const deliverySecret = String(env.EMAIL_WORKER_SECRET)
-  const deliveryUrlBase = "https://email.codabool.workers.dev"
+  const fromName = "indie-ttrpg-discovery@codabool.com";
+  const deliverySecret = String(env?.EMAIL_WORKER_SECRET || "").trim();
+  const deliveryUrlBase = "https://email.codabool.workers.dev";
 
   if (!deliverySecret) {
     throw new Error("Missing EMAIL_WORKER_SECRET env var");
@@ -84,19 +84,17 @@ async function sendEmail(env, toEmail, subject, html) {
 
   const recipientName = toEmail.split("@")[0] || "subscriber";
 
-  const url = new URL(deliveryUrlBase);
-  url.searchParams.set("to", toEmail);
-  url.searchParams.set("name", recipientName);
-  url.searchParams.set("from", fromName);
-  url.searchParams.set("subject", subject);
-  url.searchParams.set("format", "text/html");
-  url.searchParams.set("secret", deliverySecret);
+  // Keep this request shape aligned with test.junk.js, which is known-good.
+  const urlParams = new URLSearchParams({
+    subject,
+    to: toEmail,
+    name: recipientName,
+    from: fromName,
+    secret: deliverySecret,
+  }).toString();
 
-  const response = await fetch(url.toString(), {
+  const response = await fetch(`${deliveryUrlBase}/?${urlParams}`, {
     method: "POST",
-    headers: {
-      "content-type": "text/plain; charset=utf-8",
-    },
     body: String(html || ""),
   });
 

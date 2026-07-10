@@ -408,7 +408,7 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
         <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 backdrop-blur-sm md:p-6">
           <form className="space-y-6" onSubmit={(event) => event.preventDefault()}>
             <p className="text-sm text-slate-200 md:text-base">
-              Monthly email curated to your interests (no monetization, ads, tracking or any nonsense. I will accept donations on kofi)
+              Monthly email tailored to your interests (no monetization, ads, tracking or any nonsense. I will accept donations on kofi)
             </p>
 
             <div>
@@ -595,7 +595,7 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
                     </div>
                   </div>
 
-                  <div className="mt-5 rounded-xl border border-black/10 bg-white px-4 py-4">
+                  {/* <div className="mt-5 rounded-xl border border-black/10 bg-white px-4 py-4">
                     <p className="text-sm text-slate-700">Your configured filters this month:</p>
 
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -620,7 +620,7 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
                       <p>{previewLoading ? "Refreshing preview..." : `${previewCount} item(s) included`}</p>
                       {previewError ? <p className="text-red-500">{previewError}</p> : null}
                     </div>
-                  </div>
+                  </div> */}
 
                   <div className="mt-5 overflow-hidden rounded-xl border border-black/10 bg-white">
                     <iframe

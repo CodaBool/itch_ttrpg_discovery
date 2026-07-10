@@ -299,7 +299,7 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                     <tr>
                       <td style="font-size: 18px; line-height: 1.3; font-weight: 700; padding-bottom: 6px;">
-                        <a href="${escapeHtml(item.url)}" style="color: #0f172a; text-decoration: none;">${escapeHtml(item.title)}</a>
+                        <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" style="color: #0f172a; text-decoration: none;">${escapeHtml(item.title)}</a>
                       </td>
                     </tr>
                     <tr>

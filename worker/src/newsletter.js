@@ -190,6 +190,18 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function decodeHtmlEntities(value) {
+  const raw = String(value || "");
+  if (!raw || !raw.includes("&")) return raw;
+
+  return raw
+    .replace(/&#039;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
 function formatDate(raw) {
   const parsed = new Date(raw || "");
   if (Number.isNaN(parsed.getTime())) return "Unknown date";
@@ -297,75 +309,55 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
     title: String(rawPreference.title || "Your Indie TTRPG Digest").trim() || "Your Indie TTRPG Digest",
   };
 
-  const cardsHtml = items
-    .map((item) => {
-      const sourceArray = parseSourceArray(item.source);
-      const tags = sourceTagsForDisplay(sourceArray).slice(0, 8);
-      const description = String(item.description || "No description available.").trim();
-      const authorText = escapeHtml(item.author || "unknown");
-      const authorLink = item.author_url
-        ? `<a href="${escapeHtml(item.author_url)}" target="_blank" rel="noopener noreferrer" style="color: #0369a1; text-decoration: none;">${authorText}</a>`
-        : authorText;
+  const cardsHtml = items.map((item) => {
+    const sourceArray = parseSourceArray(item.source);
+    const tags = sourceTagsForDisplay(sourceArray).slice(0, 6);
+    const displayTitle = decodeHtmlEntities(item.title || "Untitled");
+    const description = decodeHtmlEntities(String(item.description || "No description available.").trim());
+    const authorRaw = decodeHtmlEntities(item.author || "unknown");
+    const authorText = escapeHtml(authorRaw);
+    const authorLink = item.author_url
+      ? `<a href="${escapeHtml(item.author_url)}" target="_blank" rel="noopener noreferrer" style="color: #0369a1; text-decoration: none;">${authorText}</a>`
+      : authorText;
 
-      return `
-        <tr>
-          <td style="padding: 0 0 14px 0;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff;">
-              ${item.image_url ? `
-                <tr>
-                  <td>
-                    <img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.title)}" style="display: block; width: 100%; max-height: 220px; object-fit: cover;" />
-                  </td>
-                </tr>
-              ` : ""}
-              <tr>
-                <td style="padding: 12px 14px; font-family: Arial, sans-serif; color: #0f172a;">
-                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                    <tr>
-                      <td style="font-size: 18px; line-height: 1.3; font-weight: 700; padding-bottom: 6px;">
-                        <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" style="color: #0f172a; text-decoration: none;">${escapeHtml(item.title)}</a>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="font-size: 13px; color: #475569; padding-bottom: 10px;">
-                        ${escapeHtml(description)}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="font-size: 12px; color: #334155; padding-bottom: 10px;">
-                        ${authorLink} &nbsp;|&nbsp;
-                        ${escapeHtml(formatDate(item.publish_date || item.update_date || item.first_seen_at || item.updated_at))} &nbsp;|&nbsp;
-                        ${escapeHtml(item.price || "-")}
-                      </td>
-                    </tr>
-                    ${tags.length ? `
-                      <tr>
-                        <td>
-                          ${tags
-                            .map(
-                              (tag) =>
-                                `<span style="display: inline-block; margin: 0 6px 6px 0; padding: 3px 8px; border: 1px solid #bae6fd; border-radius: 999px; font-size: 11px; font-family: Arial, sans-serif; color: #0369a1; background: #f0f9ff;">${escapeHtml(tag)}</span>`
-                            )
-                            .join("")}
-                        </td>
-                      </tr>
-                    ` : ""}
-                  </table>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      `;
-    })
-    .join("");
+    return `
+      <article class="card" style="border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff; min-width: 0;">
+        ${item.image_url ? `
+          <div class="card-image-frame" style="position:relative; width:100%; padding-top:74.94%; overflow:hidden; background:#0b1220;">
+            <img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.title)}" style="position:absolute; inset:0; display:block; width:100%; height:100%; object-fit:cover;" />
+          </div>
+        ` : ""}
+        <div style="padding: 12px 14px; font-family: Arial, sans-serif; color: #0f172a;">
+          <div style="font-size: 15px; line-height: 1.3; font-weight: 700; padding-bottom: 6px;">
+            <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" style="color: #0f172a; text-decoration: none;">${escapeHtml(displayTitle)}</a>
+          </div>
+          <div style="font-size: 13px; color: #475569; padding-bottom: 10px;">
+            ${escapeHtml(description)}
+          </div>
+          <div style="font-size: 12px; color: #334155; padding-bottom: 10px;">
+            ${authorLink} &nbsp;|&nbsp;
+            ${escapeHtml(formatDate(item.publish_date || item.update_date || item.first_seen_at || item.updated_at))} &nbsp;|&nbsp;
+            ${escapeHtml(item.price || "-")}
+          </div>
+          ${tags.length ? `
+            <div>
+              ${tags
+                .map(
+                  (tag) =>
+                    `<span style="display: inline-block; margin: 0 6px 6px 0; padding: 3px 8px; border: 1px solid #bae6fd; border-radius: 999px; font-size: 10px; font-family: Arial, sans-serif; color: #0369a1; background: #f0f9ff;">${escapeHtml(tag)}</span>`
+                )
+                .join("")}
+            </div>
+          ` : ""}
+        </div>
+      </article>
+    `;
+  }).join("");
 
   const emptyState = `
-    <tr>
-      <td style="padding: 18px; border: 1px dashed #cbd5e1; border-radius: 10px; background: #ffffff; font-family: Arial, sans-serif; color: #334155; font-size: 14px;">
-        No items matched this month with your current filters.
-      </td>
-    </tr>
+    <div style="padding: 18px; border: 1px dashed #cbd5e1; border-radius: 10px; background: #ffffff; font-family: Arial, sans-serif; color: #334155; font-size: 14px;">
+      No items matched this month with your current filters.
+    </div>
   `;
 
   return `
@@ -375,23 +367,38 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(preference.title)}</title>
+    <style>
+      .cards-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      @media screen and (max-width: 1100px) {
+        .cards-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media screen and (max-width: 640px) {
+        .cards-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+    </style>
   </head>
   <body style="margin:0; padding:24px 12px; background:#f1f5f9;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; max-width:760px; margin:0 auto; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
-      <tr>
-        <td style="padding:20px 18px 12px 18px; font-family: Arial, sans-serif; color:#0f172a;">
-          <h1 style="margin:0; font-size:30px; line-height:1.2;">${escapeHtml(preference.title)}</h1>
-          <p style="margin:8px 0 0 0; color:#475569; font-size:13px;">Fresh items from the last 30 days, matched to your interests.</p>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:0 18px 18px 18px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-            ${cardsHtml || emptyState}
-          </table>
-        </td>
-      </tr>
-    </table>
+    <div style="max-width:1200px; margin:0 auto; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
+      <div style="padding:20px 18px 12px 18px; font-family: Arial, sans-serif; color:#0f172a;">
+        <h1 style="margin:0; font-size:30px; line-height:1.2;">${escapeHtml(preference.title)}</h1>
+        <p style="margin:8px 0 0 0; color:#475569; font-size:13px;">Fresh items from the last 30 days, matched to your interests.</p>
+      </div>
+      <div style="padding:0 18px 18px 18px;">
+        <div class="cards-grid">
+          ${cardsHtml || emptyState}
+        </div>
+      </div>
+    </div>
   </body>
 </html>`;
 }

@@ -284,7 +284,7 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
         <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 backdrop-blur-sm md:p-6">
           <form className="space-y-6" onSubmit={(event) => event.preventDefault()}>
             <p className="text-sm text-slate-200 md:text-base">
-              Monthly email tailored to your interests (saved locally in this browser only).
+              Monthly email tailored to your interests (no ads, monetization, or any nonsense. I do accept donations on <a href="https://ko-fi.com/codabool" target="_blank" className="text-cyan-100">kofi</a>).
             </p>
 
             <div>

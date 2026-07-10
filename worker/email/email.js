@@ -1,7 +1,5 @@
 import { prepareNewsletterPreview } from "../src/newsletter.js";
 
-const EMAIL_WORKER_URL = "https://email.codabool.workers.dev";
-
 function json(data, init = {}) {
   const headers = new Headers(init.headers || {});
   headers.set("content-type", "application/json; charset=utf-8");
@@ -76,12 +74,12 @@ async function loadSubscriptionByEmail(env, email) {
 }
 
 async function sendEmail(env, toEmail, subject, html) {
-  const fromName = String(env.NEWSLETTER_FROM_NAME || "CodaBool Feed").trim();
-  const deliverySecret = String(env.EMAIL_WORKER_SECRET || env.CLOUDFLARE_API_TOKEN || "").trim();
-  const deliveryUrlBase = String(env.EMAIL_WORKER_URL || EMAIL_WORKER_URL).trim();
+  const fromName = String("Itch TTRPG Discovery Newsletter")
+  const deliverySecret = String(env.EMAIL_WORKER_SECRET)
+  const deliveryUrlBase = "https://email.codabool.workers.dev"
 
   if (!deliverySecret) {
-    throw new Error("Missing EMAIL_WORKER_SECRET (or CLOUDFLARE_API_TOKEN) env var");
+    throw new Error("Missing EMAIL_WORKER_SECRET env var");
   }
 
   const recipientName = toEmail.split("@")[0] || "subscriber";
@@ -173,14 +171,13 @@ async function handleManualSend(request, env) {
 
   const url = new URL(request.url);
   const email = normalizeEmail(body?.email ?? url.searchParams.get("email"));
-  const secret = String(body?.secret ?? url.searchParams.get("secret") ?? "").trim();
+  const secret = String(url.searchParams.get("secret"))
 
   if (!email) {
     return json({ error: "email is required" }, { status: 400 });
   }
 
-  const expected = String(env.CLOUDFLARE_API_TOKEN || "").trim();
-  if (!expected || secret !== expected) {
+  if (secret !== env.EMAIL_WORKER_SECRET) {
     return json({ error: "Unauthorized" }, { status: 401 });
   }
 

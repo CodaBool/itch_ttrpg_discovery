@@ -494,7 +494,7 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
                   <textarea
                     readOnly
                     value={existingPreferenceText}
-                    className="h-[70vh] w-full resize-none rounded-xl border border-white/20 bg-black/30 p-3 font-mono text-lg text-cyan-100"
+                    className="h-[65vh] w-full resize-none rounded-xl border border-white/20 bg-black/30 p-3 font-mono text-lg text-cyan-100"
                   />
 
                   {confirmError ? <p className="text-sm text-red-300">{confirmError}</p> : null}

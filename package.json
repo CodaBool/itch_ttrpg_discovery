@@ -28,8 +28,8 @@
     "wrangler": "^4.110.0"
   },
   "dependencies": {
+    "cld": "^2.10.1",
     "fast-xml-parser": "^5.9.3",
-    "franc": "^6.2.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   }

@@ -1,5 +1,5 @@
 import puppeteer from "puppeteer";
-import { francAll } from "franc";
+import cld from "cld";
 import { pathToFileURL } from "node:url";
 import {
   CloudflareD1Client,
@@ -18,6 +18,11 @@ const DETAIL_EXCLUDED_TAGS = new Set([
   "solo-ttrpg",
   "dnd5e",
   "dungeons-and-dragsons",
+  "larp",
+  "pathfinder",
+  "diceless",
+  "gm-less",
+  "lancer",
 ]);
 
 function mustEnv(name) {
@@ -26,6 +31,26 @@ function mustEnv(name) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value.trim();
+}
+
+function hasStrongRatingAndEngagement(rating, engagement) {
+  const value = String(rating || "").trim();
+  if (!value.includes("over")) return false;
+
+  const parts = value.split("over");
+  if (parts.length !== 2) return false;
+
+  const average = Number(parts[0]);
+  const count = Number(parts[1]);
+  const positiveCount = Number.isFinite(average) && average >= 4 && Number.isFinite(count)
+    ? Math.max(0, Math.floor(count))
+    : 0;
+
+  const engagementCount = Number.isFinite(Number(engagement))
+    ? Math.max(0, Math.floor(Number(engagement)))
+    : 0;
+
+  return positiveCount >= 3 && engagementCount >= 1;
 }
 
 export async function openBrowserSession() {
@@ -75,8 +100,8 @@ export async function scrapeDetail(page, url) {
     const comments = document.querySelector(".community_post_list_widget");
     const commentCount = comments ? comments.querySelectorAll(":scope > div").length : 0;
 
-    const noAiAnchor = document.querySelector('a[href="https://itch.io/physical-games/tag-no-ai"]');
-    const aiAssistedAnchor = document.querySelector('a[href="https://itch.io/game-assets/ai-assisted"]');
+    const noAiAnchor = document.querySelector('a[href*="/tag-no-ai"]');
+    const aiAssistedAnchor = document.querySelector('a[href*="ai-assisted"]');
 
     const sourceTags = Array.from(document.querySelectorAll('a[href*="/tag-"]'))
       .map((anchor) => {
@@ -112,37 +137,38 @@ export async function scrapeDetail(page, url) {
     };
   });
 }
-export function detectLanguageIso3(rawText) {
+export async function detectLanguageIso3(rawText) {
   const normalized = String(rawText || "").replace(/\s+/g, " ").trim();
   if (!normalized) return null;
 
   const letterCount = (normalized.match(/\p{L}/gu) || []).length;
-  if (letterCount < 160) return null;
+  if (letterCount < 120) return null;
 
-  const ranked = francAll(normalized, { minLength: 120 });
-  const top = ranked[0] || null;
-  const bestIso3 = top?.[0] || null;
-  const bestScore = Number(top?.[1]);
+  try {
+    const result = await cld.detect(normalized, {
+      isHTML: false,
+      bestEffort: true,
+    });
 
-  const englishEntry = ranked.find((entry) => entry?.[0] === "eng") || null;
-  const englishScore = Number(englishEntry?.[1]);
+    const top = Array.isArray(result?.languages) ? result.languages[0] : null;
+    if (!top) return null;
 
-  if (!bestIso3 || bestIso3 === "und" || bestIso3 === "eng") {
+    const langCode = String(top.code || "").trim().toLowerCase();
+    if (!langCode) return null;
+
+    // Keep existing behavior: English is stored as null.
+    if (langCode === "en") return null;
+
+    const percent = Number(top.percent);
+    const reliable = Boolean(result?.reliable);
+
+    // For non-reliable outputs, require stronger confidence.
+    if (!reliable && (!Number.isFinite(percent) || percent < 85)) return null;
+
+    return langCode;
+  } catch {
     return null;
   }
-
-  if (!Number.isFinite(bestScore)) return null;
-
-  // If English is also very plausible, treat as English to avoid false non-English flags.
-  if (Number.isFinite(englishScore)) {
-    const ENGLISH_CONFIDENT = 0.93;
-    const MIN_MARGIN_OVER_ENGLISH = 0.08;
-
-    if (englishScore >= ENGLISH_CONFIDENT) return null;
-    if (bestScore - englishScore < MIN_MARGIN_OVER_ENGLISH) return null;
-  }
-
-  return bestIso3;
 }
 
 export async function createDetailPage(browser) {
@@ -307,7 +333,7 @@ export async function runParallelDetailScrape() {
           const rating = metrics.rating;
           const engagement = metrics.engagement;
           const ai = metrics.ai;
-          const language = detectLanguageIso3(scraped.languageText);
+          const language = await detectLanguageIso3(scraped.languageText);
           const sourceTags = Array.isArray(scraped.sourceTags) ? scraped.sourceTags : [];
 
           const matchedExcludedTag = sourceTags.find((tag) =>
@@ -315,6 +341,12 @@ export async function runParallelDetailScrape() {
           );
 
           if (matchedExcludedTag) {
+            const hasOverrideSignal = hasStrongRatingAndEngagement(rating, engagement);
+            if (hasOverrideSignal) {
+              console.log(
+                `[worker-${workerId}] allowed ${url} despite excluded tag (${matchedExcludedTag}) due to strong rating/engagement`
+              );
+            } else {
             if (!dryRun) {
               await d1.execute("DELETE FROM items WHERE url = ?", [url]);
             }
@@ -330,6 +362,7 @@ export async function runParallelDetailScrape() {
             }
 
             continue;
+            }
           }
 
           if (String(ai || "").trim().toLowerCase() === "ai assisted") {

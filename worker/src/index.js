@@ -1,5 +1,4 @@
 import { XMLParser } from "fast-xml-parser";
-import { franc } from "franc";
 import { prepareNewsletterPreview } from "./newsletter.js";
 
 // Keep in sync with worker/src/index.js
@@ -144,24 +143,6 @@ function parseAuthorUrlFromFetchedUrl(guid) {
   return guidStr ? `https://${guidStr}.itch.io` : "";
 }
 
-function toLanguageText(item) {
-  const title = textValue(item.plainTitle) || textValue(item.title);
-  const description = stripHtmlAndNormalizeWhitespace(textValue(item.description));
-  return `${title} ${description}`.trim();
-}
-
-function detectItemLanguage(item) {
-  const raw = toLanguageText(item);
-  if (!raw) return null;
-
-  const detectedIso3 = franc(raw, { minLength: 20 });
-  if (!detectedIso3 || detectedIso3 === "und" || detectedIso3 === "eng") {
-    return null;
-  }
-
-  return detectedIso3;
-}
-
 function normalizeSource(source) {
   return {
     category: source.category,
@@ -206,7 +187,6 @@ function normalizeItem(item, fetchedUrl) {
     url: link,
     title,
     description: stripHtmlAndNormalizeWhitespace(textValue(item.description)),
-    language: detectItemLanguage(item),
     image_url: textValue(item.imageurl),
     price: textValue(item.price),
     publish_date: textValue(item.pubDate),
@@ -361,8 +341,8 @@ async function upsertItem(env, item, source) {
     await env.DB.prepare(
       `INSERT INTO items (
         url, source, title, description, image_url, price, publish_date, update_date,
-        author, author_url, language, first_seen_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+        author, author_url, first_seen_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
     )
       .bind(
         item.url,
@@ -374,8 +354,7 @@ async function upsertItem(env, item, source) {
         item.publish_date,
         item.update_date,
         item.author,
-        item.author_url,
-        item.language
+        item.author_url
       )
       .run();
 
@@ -394,7 +373,6 @@ async function upsertItem(env, item, source) {
          update_date = ?,
          author = ?,
          author_url = ?,
-         language = ?,
          updated_at = CURRENT_TIMESTAMP
      WHERE url = ?`
   )
@@ -408,7 +386,6 @@ async function upsertItem(env, item, source) {
       item.update_date,
       item.author,
       item.author_url,
-      item.language,
       item.url
     )
     .run();

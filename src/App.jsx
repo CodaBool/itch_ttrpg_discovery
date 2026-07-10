@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import FilterPill from "./components/FilterPill";
 import ItemCard from "./components/ItemCard";
+import PreferenceForm from "./components/PreferenceForm";
 import Jams from "./Jams";
 import NewsletterBuilder from "./NewsletterBuilder";
 import { banAuthor, banUrl, createAdminClientFromEnv, isAdminEnabled } from "./admin";
+import { loadPreferenceDraft, makeDefaultSystemScores, savePreferenceDraft } from "./preferencesStorage";
 
 
 
@@ -97,11 +99,11 @@ const NON_SYSTEM_TAGS = ALL_TAGS.filter(
 const STORAGE_KEYS = {
     category: "itch-feed:selected-category",
     system: "itch-feed:selected-system",
+    focusedSystem: "itch-feed:focused-system",
     tags: "itch-feed:selected-tags",
     hideNonEnglish: "itch-feed:hide-non-english",
     hideAiAssisted: "itch-feed:hide-ai-assisted",
     minRatings: "itch-feed:min-ratings",
-    readingMode: "itch-feed:reading-mode",
     hiddenUrls: "itch-feed:hidden-urls",
     blockedAuthors: "itch-feed:blocked-authors",
     alwaysShowBeyondYear: "itch-feed:always-show-over-365",
@@ -113,7 +115,15 @@ const SYSTEM_TAGS_BY_KEY = Object.fromEntries(
     SYSTEM_DEFINITIONS.map((system) => [system.key, system.tags])
 );
 
+const SYSTEM_MATCH_TAGS = new Set(
+    Object.values(SYSTEM_TAGS_BY_KEY)
+        .flat()
+        .map((tag) => String(tag || "").trim().toLowerCase())
+        .filter(Boolean)
+);
+
 const VIP_AUTHORS = ["goblinarchives", "tombloom", "massif-press", "claymorerpgs"];
+const HIDDEN_SOURCE_TERMS = ["ttrpg", "tabletop"];
 
 function loadStoredArray(key, fallback, allowedValues) {
     if (typeof window === "undefined") return fallback;
@@ -154,26 +164,6 @@ function loadStoredCategoryValue() {
     }
 }
 
-function loadStoredSystemValue() {
-    if (typeof window === "undefined") return "";
-
-    try {
-        const raw = window.localStorage.getItem(STORAGE_KEYS.system);
-        if (!raw) return "";
-        const parsed = JSON.parse(raw);
-        if (typeof parsed !== "string") return "";
-
-        // Backward-compat: old stored panic-engine selection now maps to mothership.
-        const normalized = ["panic-engine", "mothership-rpg"].includes(parsed)
-            ? "mothership"
-            : parsed;
-        const allowed = SYSTEM_FILTERS.map((system) => system.key);
-        return allowed.includes(normalized) ? normalized : "";
-    } catch {
-        return "";
-    }
-}
-
 function loadStoredStringArray(key) {
     if (typeof window === "undefined") return [];
 
@@ -187,6 +177,22 @@ function loadStoredStringArray(key) {
             .filter(Boolean);
     } catch {
         return [];
+    }
+}
+
+function loadStoredFocusedSystemValue() {
+    if (typeof window === "undefined") return "";
+
+    try {
+        const raw = window.localStorage.getItem(STORAGE_KEYS.focusedSystem);
+        if (!raw) return "";
+        const parsed = JSON.parse(raw);
+        if (typeof parsed !== "string") return "";
+
+        const allowed = SYSTEM_FILTERS.map((system) => system.key);
+        return allowed.includes(parsed) ? parsed : "";
+    } catch {
+        return "";
     }
 }
 
@@ -220,10 +226,6 @@ function loadStoredNumber(key, fallback = 0, min = 0, max = Number.POSITIVE_INFI
 
 function toggleValue(list, value) {
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
-}
-
-function toggleSystemSelection(current, next) {
-    return current === next ? "" : next;
 }
 
 function getSystemMatchTags(systemKey) {
@@ -280,6 +282,44 @@ function parseRatingCount(item) {
     return Math.max(0, Math.floor(count));
 }
 
+    function parseRatingMetrics(rawRating) {
+        const value = String(rawRating || "").trim();
+        if (!value.includes("over")) return { average: 0, count: 0 };
+
+        const parts = value.split("over");
+        if (parts.length !== 2) return { average: 0, count: 0 };
+
+        const average = Number(parts[0]);
+        const count = Number(parts[1]);
+
+        return {
+            average: Number.isFinite(average) ? average : 0,
+            count: Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0,
+        };
+    }
+
+    function positiveRatingCount(item) {
+        const { average, count } = parseRatingMetrics(item?.rating);
+        if (average < 4) return 0;
+        return count;
+    }
+
+    function engagementCount(item) {
+        const value = Number(item?.engagement);
+        if (!Number.isFinite(value)) return 0;
+        return Math.max(0, Math.floor(value));
+    }
+
+    function meetsSystemLevelRequirement(item, level) {
+        const requirement = LEVEL_REQUIREMENTS[level] || LEVEL_REQUIREMENTS[4];
+        const positive = positiveRatingCount(item);
+        const engagement = engagementCount(item);
+
+        if (positive < requirement.minPositive) return false;
+        if (engagement < requirement.minEngagement) return false;
+        return true;
+    }
+
 function normalizeAuthorKey(author) {
     return String(author || "").trim().toLowerCase();
 }
@@ -303,21 +343,31 @@ const BUCKET_META = {
     "over-365": { label: "Over 365 Days" },
 };
 
+const LEVEL_REQUIREMENTS = {
+    0: { minPositive: Number.POSITIVE_INFINITY, minEngagement: Number.POSITIVE_INFINITY },
+    1: { minPositive: 5, minEngagement: 1 },
+    2: { minPositive: 3, minEngagement: 0 },
+    3: { minPositive: 2, minEngagement: 0 },
+    4: { minPositive: 1, minEngagement: 0 },
+    5: { minPositive: 0, minEngagement: 0 },
+};
+
 const BUCKET_ORDER = ["last-30", "last-365", "over-365"];
 
 export default function App() {
     const hasAdminToken = isAdminEnabled();
+    const defaultSystems = useMemo(() => makeDefaultSystemScores(SYSTEM_FILTERS), []);
+    const draft = useMemo(() => loadPreferenceDraft(defaultSystems), [defaultSystems]);
     const [activePage, setActivePage] = useState("discover");
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [search, setSearch] = useState("");
     const [selectedCategory, setSelectedCategory] = useState(() =>
         loadStoredCategoryValue()
     );
-    const [selectedSystem, setSelectedSystem] = useState(() =>
-        loadStoredSystemValue()
-    );
+    const [pendingSystemScores, setPendingSystemScores] = useState(draft.systems);
+    const [systemScores, setSystemScores] = useState(draft.systems);
+    const [focusedSystemKey, setFocusedSystemKey] = useState(() => loadStoredFocusedSystemValue());
     const [selectedTags, setSelectedTags] = useState(() =>
         loadStoredArray(STORAGE_KEYS.tags, NON_SYSTEM_TAGS, NON_SYSTEM_TAGS)
     );
@@ -329,35 +379,46 @@ export default function App() {
     const [isDesktopTools, setIsDesktopTools] = useState(false);
     const [showBeyondYear, setShowBeyondYear] = useState(false);
     const [alwaysShowBeyondYear, setAlwaysShowBeyondYear] = useState(() => loadStoredBool(STORAGE_KEYS.alwaysShowBeyondYear, false));
-    const [hideNonEnglish, setHideNonEnglish] = useState(() => loadStoredBool(STORAGE_KEYS.hideNonEnglish, true));
-    const [hideAiAssisted, setHideAiAssisted] = useState(() => loadStoredBool(STORAGE_KEYS.hideAiAssisted, true));
-    const [minRatings, setMinRatings] = useState(() => loadStoredNumber(STORAGE_KEYS.minRatings, 0, 0, 10));
-    const [readingMode, setReadingMode] = useState(() => loadStoredBool(STORAGE_KEYS.readingMode, true));
+    const [hideNonEnglish, setHideNonEnglish] = useState(draft.englishOnly);
+    const [hideAiAssisted, setHideAiAssisted] = useState(draft.excludeAiAssisted);
+    const [minRatings, setMinRatings] = useState(() => loadStoredNumber(STORAGE_KEYS.minRatings, 1, 0, 10));
 
-    const availableSystems = useMemo(() => {
-        const available = new Set();
+    useEffect(() => {
+        if (activePage !== "discover") return;
 
-        items.forEach((item) => {
-            if (!hasCategory(item, selectedCategory)) return;
+        const latest = loadPreferenceDraft(defaultSystems);
+        setPendingSystemScores(latest.systems);
+        setSystemScores(latest.systems);
+        setHideNonEnglish(latest.englishOnly);
+        setHideAiAssisted(latest.excludeAiAssisted);
+        setBlockedAuthors(Array.isArray(latest.excludedCreators) ? latest.excludedCreators : []);
+    }, [activePage, defaultSystems]);
 
-            const tags = itemTagSet(item);
+    useEffect(() => {
+        if (activePage !== "discover") return;
 
-            SYSTEM_FILTERS.forEach((system) => {
-                const matchTags = getSystemMatchTags(system.key);
-                if (matchTags.some((tag) => tags.has(tag))) {
-                    available.add(system.key);
-                }
-            });
-        });
+        const timeoutId = window.setTimeout(() => {
+            setSystemScores(pendingSystemScores);
+        }, 800);
 
-        return available;
-    }, [items, selectedCategory]);
+        return () => window.clearTimeout(timeoutId);
+    }, [activePage, pendingSystemScores]);
 
-    const visibleSystemFilters = useMemo(() => {
-        return SYSTEM_FILTERS.filter(
-            (system) => system.key === selectedSystem || availableSystems.has(system.key)
-        );
-    }, [availableSystems, selectedSystem]);
+    const activeSystemKeys = useMemo(() => {
+        if (focusedSystemKey) return [focusedSystemKey];
+
+        return Object.entries(systemScores)
+            .filter(([, score]) => Number(score) > 0)
+            .map(([key]) => key);
+    }, [systemScores, focusedSystemKey]);
+
+    const blockedSystemKeys = useMemo(() => {
+        if (focusedSystemKey) return [];
+
+        return Object.entries(systemScores)
+            .filter(([, score]) => Number(score) <= 0)
+            .map(([key]) => key);
+    }, [systemScores, focusedSystemKey]);
 
     useEffect(() => {
         // Cleanup old localStorage values from earlier UI versions.
@@ -368,17 +429,6 @@ export default function App() {
         if (typeof window === "undefined") return;
         window.localStorage.setItem(STORAGE_KEYS.category, JSON.stringify(selectedCategory));
     }, [selectedCategory]);
-
-    useEffect(() => {
-        if (typeof window === "undefined") return;
-        window.localStorage.setItem(STORAGE_KEYS.system, JSON.stringify(selectedSystem));
-    }, [selectedSystem]);
-
-    useEffect(() => {
-        if (!selectedSystem) return;
-        if (availableSystems.has(selectedSystem)) return;
-        setSelectedSystem("");
-    }, [selectedSystem, availableSystems]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -407,13 +457,24 @@ export default function App() {
 
     useEffect(() => {
         if (typeof window === "undefined") return;
-        window.localStorage.setItem(STORAGE_KEYS.minRatings, JSON.stringify(minRatings));
-    }, [minRatings]);
+        window.localStorage.setItem(STORAGE_KEYS.focusedSystem, JSON.stringify(focusedSystemKey));
+    }, [focusedSystemKey]);
+
+    useEffect(() => {
+        const existingDraft = loadPreferenceDraft(defaultSystems);
+        savePreferenceDraft({
+            ...existingDraft,
+            systems: systemScores,
+            englishOnly: hideNonEnglish,
+            excludeAiAssisted: hideAiAssisted,
+            excludedCreators: blockedAuthors,
+        });
+    }, [defaultSystems, systemScores, hideNonEnglish, hideAiAssisted, blockedAuthors]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
-        window.localStorage.setItem(STORAGE_KEYS.readingMode, JSON.stringify(readingMode));
-    }, [readingMode]);
+        window.localStorage.setItem(STORAGE_KEYS.minRatings, JSON.stringify(minRatings));
+    }, [minRatings]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -429,7 +490,6 @@ export default function App() {
             setIsDesktopTools(enabled);
             if (!enabled) {
                 setInteractionMode("none");
-                setReadingMode(false);
             }
         };
 
@@ -448,7 +508,6 @@ export default function App() {
             setError("");
 
             try {
-                const q = search.trim();
                 const collected = [];
 
                 let offset = 0;
@@ -460,7 +519,6 @@ export default function App() {
                         limit: String(PAGE_SIZE),
                         offset: String(offset),
                     });
-                    if (q) params.set("q", q);
 
                     const response = await fetch(`${API_BASE}/api/items?${params.toString()}`, {
                         signal: controller.signal,
@@ -494,7 +552,7 @@ export default function App() {
 
         load();
         return () => controller.abort();
-    }, [search]);
+    }, []);
 
     const hiddenUrlSet = useMemo(() => new Set(hiddenUrls), [hiddenUrls]);
     const blockedAuthorSet = useMemo(() => new Set(blockedAuthors), [blockedAuthors]);
@@ -517,16 +575,52 @@ export default function App() {
             if (authorKey && blockedAuthorSet.has(authorKey)) return false;
 
             const tags = itemTagSet(item);
+            const hasAnySystemTag = Array.from(SYSTEM_MATCH_TAGS).some((tag) => tags.has(tag));
 
-            if (selectedSystem) {
-                const matchTags = getSystemMatchTags(selectedSystem);
-                return matchTags.some((tag) => tags.has(tag));
+            if (focusedSystemKey) {
+                const matchTags = getSystemMatchTags(focusedSystemKey);
+                const tagMatched = matchTags.some((tag) => tags.has(tag));
+                if (!tagMatched) return false;
+
+                const level = Math.max(0, Math.min(5, Math.round(Number(systemScores[focusedSystemKey]) || 0)));
+                if (level < 5 && !meetsSystemLevelRequirement(item, level)) return false;
+
+                return true;
             }
+
+            if (activeSystemKeys.length > 0 && hasAnySystemTag) {
+                const matched = activeSystemKeys.some((systemKey) => {
+                    const matchTags = getSystemMatchTags(systemKey);
+                    const tagMatched = matchTags.some((tag) => tags.has(tag));
+                    if (!tagMatched) return false;
+
+                    const level = Math.max(0, Math.min(5, Math.round(Number(systemScores[systemKey]) || 0)));
+                    if (level >= 5) return true;
+
+                    return meetsSystemLevelRequirement(item, level);
+                });
+
+                if (matched) {
+                    // Positive-interest match wins, even if the item also has other system tags.
+                    return true;
+                }
+            }
+
+            if (blockedSystemKeys.length > 0 && hasAnySystemTag) {
+                const hasBlockedSystemTag = blockedSystemKeys.some((systemKey) => {
+                    const matchTags = getSystemMatchTags(systemKey);
+                    return matchTags.some((tag) => tags.has(tag));
+                });
+
+                if (hasBlockedSystemTag) return false;
+            }
+
+            if (activeSystemKeys.length > 0 && hasAnySystemTag) return false;
 
             if (selectedTags.length === 0) return true;
             return selectedTags.some((tag) => tags.has(tag));
         });
-    }, [items, selectedCategory, selectedSystem, selectedTags, hiddenUrlSet, blockedAuthorSet, hideNonEnglish, hideAiAssisted, minRatings]);
+    }, [items, selectedCategory, focusedSystemKey, activeSystemKeys, blockedSystemKeys, systemScores, selectedTags, hiddenUrlSet, blockedAuthorSet, hideNonEnglish, hideAiAssisted, minRatings]);
 
     function runItemAction(item, mode) {
         const animationType = mode === "block-author" ? "cut" : "stamp";
@@ -644,6 +738,7 @@ export default function App() {
     const showTimelineLayout = groupedBuckets.length > 1;
     const singleBucket = groupedBuckets.length === 1 ? groupedBuckets[0] : null;
     const shouldShowBeyondYear = showBeyondYear || alwaysShowBeyondYear;
+    const focusedSystemLabel = SYSTEM_FILTERS.find((system) => system.key === focusedSystemKey)?.label || focusedSystemKey;
 
     function enableAlwaysShowBeyondYear() {
         setAlwaysShowBeyondYear(true);
@@ -652,7 +747,7 @@ export default function App() {
 
     useEffect(() => {
         setShowBeyondYear(false);
-    }, [selectedCategory, selectedSystem, selectedTags, search]);
+    }, [selectedCategory, systemScores, selectedTags]);
 
     if (activePage === "jams") {
         return <Jams onBack={() => setActivePage("discover")} />;
@@ -709,20 +804,6 @@ export default function App() {
                         </div>
                     </div>
 
-                    <div className="mt-5">
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Systems</p>
-                        <div className="flex flex-wrap gap-2">
-                            {visibleSystemFilters.map((system) => (
-                                <FilterPill
-                                    key={system.key}
-                                    label={system.label}
-                                    active={selectedSystem === system.key}
-                                    onClick={() => setSelectedSystem((prev) => toggleSystemSelection(prev, system.key))}
-                                />
-                            ))}
-                        </div>
-                    </div>
-
                     <div className="pt-4">
                         <button
                             type="button"
@@ -752,63 +833,32 @@ export default function App() {
                         </button>
 
                         <div id="advanced-filters" className={isAdvancedOpen ? "mt-3 space-y-4" : "hidden"}>
-                            <div>
-                                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Search</label>
-                                <input
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search title or description"
-                                    className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-orange-300/60"
-                                />
-                            </div>
+                            <PreferenceForm
+                                systems={SYSTEM_FILTERS}
+                                systemScores={pendingSystemScores}
+                                onSystemScoreChange={(systemKey, value) => {
+                                    setPendingSystemScores((prev) => ({
+                                        ...prev,
+                                        [systemKey]: Math.min(5, Math.max(0, Math.round(Number(value) || 0))),
+                                    }));
+                                }}
+                                focusedSystemKey={focusedSystemKey}
+                                onSystemFocusToggle={(systemKey) => {
+                                    setFocusedSystemKey((prev) => (prev === systemKey ? "" : systemKey));
+                                }}
+                                englishOnly={hideNonEnglish}
+                                onEnglishOnlyChange={setHideNonEnglish}
+                                excludeAiAssisted={hideAiAssisted}
+                                onExcludeAiAssistedChange={setHideAiAssisted}
+                                includeNewsletterExtras={false}
+                                theme="orange"
+                            />
 
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Tags - <span className="lowercase tracking-[0.05em]">if any tag is found from the selected tags below, the result is shown (deselection doesn't necessarily exclude from showing)</span></p>
-                            <div className="flex flex-wrap gap-2">
-                                {NON_SYSTEM_TAGS.map((tag) => (
-                                    <FilterPill
-                                        key={tag}
-                                        label={tag}
-                                        active={selectedTags.includes(tag)}
-                                        onClick={() => setSelectedTags((prev) => toggleValue(prev, tag))}
-                                    />
-                                ))}
-                            </div>
-
-                            {isDesktopTools ? (
-                                <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
-                                    <input
-                                        type="checkbox"
-                                        checked={readingMode}
-                                        onChange={(event) => setReadingMode(event.target.checked)}
-                                        className="h-4 w-4 accent-amber-300"
-                                    />
-                                    <span className="font-semibold uppercase tracking-[0.12em]">Reading Mode</span>
-                                </label>
-                            ) : null}
-
-                            <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
-                                <input
-                                    type="checkbox"
-                                    checked={hideNonEnglish}
-                                    onChange={(event) => setHideNonEnglish(event.target.checked)}
-                                    className="h-4 w-4 accent-amber-300"
-                                />
-                                <span className="font-semibold uppercase tracking-[0.12em]">Hide languages other than English</span>
-                            </label>
-
-                            <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
-                                <input
-                                    type="checkbox"
-                                    checked={hideAiAssisted}
-                                    onChange={(event) => setHideAiAssisted(event.target.checked)}
-                                    className="h-4 w-4 accent-amber-300"
-                                />
-                                <span className="font-semibold uppercase tracking-[0.12em]">Hide AI Assisted</span>
-                            </label>
+                            {/* I have removed UI for tag selection, because it's not as useful of a feature as I expected */}
 
                             <label className="block rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
                                 <div className="mb-2 flex items-center justify-between gap-3">
-                                    <span className="font-semibold uppercase tracking-[0.12em]">Minimum number of ratings</span>
+                                    <span className="font-semibold uppercase tracking-[0.12em]">Global minimum number of ratings</span>
                                     <span className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-200">{minRatings}</span>
                                 </div>
                                 <input
@@ -859,7 +909,7 @@ export default function App() {
                                     href="https://github.com/CodaBool/itch_ttrpg_discovery"
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex w-fit items-center gap-2 rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-100 transition hover:border-white/40"
+                                    className="inline-flex w-fit items-center gap-2 rounded-lg border border-white/20 bg-white/[0.03] px-2 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-100 transition hover:border-white/40 md:px-3"
                                     aria-label="Open project GitHub repository"
                                 >
                                     <svg
@@ -872,11 +922,11 @@ export default function App() {
                                     >
                                         <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8" />
                                     </svg>
-                                    GPL3 - always Free
+                                    <span className="hidden md:inline">GPL3 - always Free</span>
                                 </a>
 
                                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">
-                                    <span>Made with</span>
+                                    <span className="hidden md:inline">Made with</span>
                                     <svg
                                         xmlns="http://www.w3.org/2000/svg"
                                         width="16"
@@ -887,12 +937,28 @@ export default function App() {
                                         strokeWidth="2"
                                         strokeLinecap="round"
                                         strokeLinejoin="round"
-                                        className="inline animate-pulse"
+                                        className="hidden md:inline animate-pulse"
                                         aria-hidden="true"
                                     >
                                         <path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />
                                     </svg>
+                                    <span className="md:hidden">By</span>
                                     <span><a href="https://codabool.itch.io" target="_blank">CodaBool</a></span>
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="red"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        className="inline md:hidden animate-pulse"
+                                        aria-hidden="true"
+                                    >
+                                        <path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />
+                                    </svg>
                                 </div>
                             </div>
                         </div>
@@ -979,6 +1045,11 @@ export default function App() {
 
                 {loading ? <p className="mt-6 text-sm text-slate-300">Loading feed entries...</p> : null}
                 {error ? <p className="mt-6 rounded-xl border border-red-300/30 bg-red-300/10 p-3 text-sm text-red-100">{error}</p> : null}
+                {focusedSystemKey ? (
+                    <p className="my-2 mx-1 rounded-xl border border-amber-300/55 bg-amber-300/15 p-3 text-sm font-semibold text-amber-100">
+                        {`Only showing items from the ${focusedSystemLabel} system`}
+                    </p>
+                ) : null}
 
                 {!loading && !error ? (
                     showTimelineLayout ? (
@@ -1029,13 +1100,13 @@ export default function App() {
                                                             key={item.url}
                                                             item={item}
                                                             isVipAuthor={VIP_AUTHORS.includes(normalizeAuthorKey(item.author))}
-                                                            readingMode={readingMode}
                                                             interactionMode={isDesktopTools ? interactionMode : "none"}
                                                             onToolAction={handleItemToolAction}
                                                             onAuthorToolAction={handleAuthorToolAction}
                                                             actionState={itemActionState[item.url] || "idle"}
                                                             shake={isDesktopTools && interactionMode === "block-author"}
-                                                            hiddenSourceTags={selectedSystem ? getSystemMatchTags(selectedSystem) : []}
+                                                            hiddenSourceTags={[]}
+                                                            hiddenSourceTerms={HIDDEN_SOURCE_TERMS}
                                                         />
                                                     ))}
                                                 </div>
@@ -1048,13 +1119,13 @@ export default function App() {
                                                     key={item.url}
                                                     item={item}
                                                     isVipAuthor={VIP_AUTHORS.includes(normalizeAuthorKey(item.author))}
-                                                    readingMode={readingMode}
                                                     interactionMode={isDesktopTools ? interactionMode : "none"}
                                                     onToolAction={handleItemToolAction}
                                                     onAuthorToolAction={handleAuthorToolAction}
                                                     actionState={itemActionState[item.url] || "idle"}
                                                     shake={isDesktopTools && interactionMode === "block-author"}
-                                                    hiddenSourceTags={selectedSystem ? getSystemMatchTags(selectedSystem) : []}
+                                                    hiddenSourceTags={[]}
+                                                    hiddenSourceTerms={HIDDEN_SOURCE_TERMS}
                                                 />
                                             ))}
                                         </div>
@@ -1100,13 +1171,13 @@ export default function App() {
                                                 key={item.url}
                                                 item={item}
                                                 isVipAuthor={VIP_AUTHORS.includes(normalizeAuthorKey(item.author))}
-                                                readingMode={readingMode}
                                                 interactionMode={isDesktopTools ? interactionMode : "none"}
                                                 onToolAction={handleItemToolAction}
                                                 onAuthorToolAction={handleAuthorToolAction}
                                                 actionState={itemActionState[item.url] || "idle"}
                                                 shake={isDesktopTools && interactionMode === "block-author"}
-                                                hiddenSourceTags={selectedSystem ? getSystemMatchTags(selectedSystem) : []}
+                                                hiddenSourceTags={[]}
+                                                hiddenSourceTerms={HIDDEN_SOURCE_TERMS}
                                             />
                                         ))}
                                     </div>
@@ -1120,13 +1191,13 @@ export default function App() {
                                             key={item.url}
                                             item={item}
                                             isVipAuthor={VIP_AUTHORS.includes(normalizeAuthorKey(item.author))}
-                                            readingMode={readingMode}
                                             interactionMode={isDesktopTools ? interactionMode : "none"}
                                             onToolAction={handleItemToolAction}
                                             onAuthorToolAction={handleAuthorToolAction}
                                             actionState={itemActionState[item.url] || "idle"}
                                             shake={isDesktopTools && interactionMode === "block-author"}
-                                            hiddenSourceTags={selectedSystem ? getSystemMatchTags(selectedSystem) : []}
+                                            hiddenSourceTags={[]}
+                                            hiddenSourceTerms={HIDDEN_SOURCE_TERMS}
                                         />
                                     ))
                                 ) : (

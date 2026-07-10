@@ -1,4 +1,5 @@
 import puppeteer from "puppeteer";
+import { franc } from "franc";
 import { pathToFileURL } from "node:url";
 import {
   CloudflareD1Client,
@@ -53,6 +54,8 @@ export async function scrapeDetail(page, url) {
   }
 
   return page.evaluate(() => {
+    const normalize = (value) => String(value || "").replace(/\s+/g, " ").trim();
+
     const ratingEl = document.querySelector(".aggregate_rating");
     const ratingTooltip = ratingEl ? ratingEl.getAttribute("data-tooltip") : null;
 
@@ -65,13 +68,41 @@ export async function scrapeDetail(page, url) {
     const noAiAnchor = document.querySelector('a[href="https://itch.io/physical-games/tag-no-ai"]');
     const aiAssistedAnchor = document.querySelector('a[href="https://itch.io/game-assets/ai-assisted"]');
 
+    const pageTitle =
+      document.querySelector("h1.game_title")?.textContent ||
+      document.querySelector("h1")?.textContent ||
+      document.title ||
+      "";
+
+    const metaDescription =
+      document.querySelector('meta[name="description"]')?.getAttribute("content") || "";
+
+    const richDescription =
+      document.querySelector(".formatted_description")?.textContent ||
+      document.querySelector(".game_description")?.textContent ||
+      "";
+
+    const languageText = normalize(`${pageTitle} ${metaDescription} ${richDescription}`).slice(0, 8000);
+
     return {
       ratingTooltip,
       topicCount,
       commentCount,
       ai: aiAssistedAnchor ? "ai assisted" : noAiAnchor ? "no ai" : null,
+      languageText,
     };
   });
+}
+export function detectLanguageIso3(rawText) {
+  const normalized = String(rawText || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+
+  const detectedIso3 = franc(normalized, { minLength: 120 });
+  if (!detectedIso3 || detectedIso3 === "und" || detectedIso3 === "eng") {
+    return null;
+  }
+
+  return detectedIso3;
 }
 
 export async function createDetailPage(browser) {
@@ -234,6 +265,7 @@ export async function runParallelDetailScrape() {
           const rating = metrics.rating;
           const engagement = metrics.engagement;
           const ai = metrics.ai;
+          const language = detectLanguageIso3(scraped.languageText);
 
           if (shouldRemoveForLowRating(rating)) {
             if (!dryRun) {
@@ -259,15 +291,16 @@ export async function runParallelDetailScrape() {
                SET rating = ?,
                    engagement = ?,
                    ai = ?,
+                   language = ?,
                    updated_at = CURRENT_TIMESTAMP
                WHERE url = ?`,
-              [rating, engagement, ai, url]
+              [rating, engagement, ai, language, url]
             );
           }
 
           counters.updated += 1;
           console.log(
-            `[worker-${workerId}] updated ${url} | rating=${rating ?? "null"} | engagement=${engagement} | ai=${ai ?? "null"}`
+            `[worker-${workerId}] updated ${url} | rating=${rating ?? "null"} | engagement=${engagement} | ai=${ai ?? "null"} | language=${language ?? "null"}`
           );
         } catch (error) {
           counters.failed += 1;

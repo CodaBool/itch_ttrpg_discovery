@@ -1,6 +1,5 @@
 import puppeteer from "puppeteer";
 import { XMLParser } from "fast-xml-parser";
-import { franc } from "franc";
 
 // Keep in sync with worker/src/index.js
 const PAIR_TAGS = [
@@ -135,24 +134,6 @@ function parseAuthorUrlFromFetchedUrl(guid) {
   return author ? `https://${author}.itch.io` : "";
 }
 
-function toLanguageText(item) {
-  const title = textValue(item.plainTitle) || textValue(item.title);
-  const description = stripHtmlAndNormalizeWhitespace(textValue(item.description));
-  return `${title} ${description}`.trim();
-}
-
-function detectItemLanguage(item) {
-  const raw = toLanguageText(item);
-  if (!raw) return null;
-
-  const detectedIso3 = franc(raw, { minLength: 20 });
-  if (!detectedIso3 || detectedIso3 === "und" || detectedIso3 === "eng") {
-    return null;
-  }
-
-  return detectedIso3;
-}
-
 function normalizeSource(source) {
   return {
     category: source.category,
@@ -197,7 +178,6 @@ function normalizeItem(item) {
     url: link,
     title,
     description: stripHtmlAndNormalizeWhitespace(textValue(item.description)),
-    language: detectItemLanguage(item),
     image_url: textValue(item.imageurl),
     price: textValue(item.price),
     publish_date: textValue(item.pubDate),
@@ -344,8 +324,8 @@ async function upsertItem(client, item, source, dryRun) {
     await client.query(
       `INSERT INTO items (
         url, source, title, description, image_url, price, publish_date, update_date,
-        author, author_url, language, first_seen_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        author, author_url, first_seen_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
       [
         item.url,
         JSON.stringify([normalizeSource(source)]),
@@ -357,7 +337,6 @@ async function upsertItem(client, item, source, dryRun) {
         item.update_date,
         item.author,
         item.author_url,
-        item.language,
       ]
     );
 
@@ -376,8 +355,7 @@ async function upsertItem(client, item, source, dryRun) {
          publish_date = ?,
          update_date = ?,
          author = ?,
-         author_url = ?,
-         language = ?,
+       author_url = ?,
          updated_at = CURRENT_TIMESTAMP
      WHERE url = ?`,
     [
@@ -390,7 +368,6 @@ async function upsertItem(client, item, source, dryRun) {
       item.update_date,
       item.author,
       item.author_url,
-      item.language,
       item.url,
     ]
   );

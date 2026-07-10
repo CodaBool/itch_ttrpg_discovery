@@ -183,7 +183,7 @@ export default function ItemCard({
   item,
   isVipAuthor = false,
   hiddenSourceTags = [],
-  readingMode = false,
+  hiddenSourceTerms = [],
   interactionMode = "none",
   onToolAction,
   onAuthorToolAction,
@@ -191,11 +191,21 @@ export default function ItemCard({
   shake = false,
 }) {
   const hiddenTagSet = new Set(hiddenSourceTags.map((tag) => String(tag || "").toLowerCase()));
+  const hiddenTermSet = new Set(
+    hiddenSourceTerms
+      .map((term) => String(term || "").trim().toLowerCase())
+      .filter(Boolean)
+  );
   const sourceChips = item.source
     .filter((source) => {
       if (!hiddenTagSet.size) return true;
       const tags = readSourceTags(source);
       return !tags.some((tag) => hiddenTagSet.has(tag));
+    })
+    .filter((source) => {
+      if (!hiddenTermSet.size) return true;
+      const displayTerm = formatSourceTerm(source.term).trim().toLowerCase();
+      return !hiddenTermSet.has(displayTerm);
     })
     .slice(0, 4);
   const toolModeEnabled = interactionMode !== "none";
@@ -216,12 +226,6 @@ export default function ItemCard({
     ? `${ratingMetric.average.toFixed(2)} average rating across ${ratingMetric.count} ratings`
     : "";
   const engagementTooltip = `${engagementMetric ?? 0} comments or threads`;
-  const hoverRevealClass = readingMode
-    ? "opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-    : "opacity-100";
-  const priceTextRevealClass = readingMode
-    ? "opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-    : "opacity-100";
 
   return (
     <article
@@ -312,13 +316,13 @@ export default function ItemCard({
         : "border border-emerald-300/40 bg-emerald-300/10 text-emerald-100",
     ].join(" ")}
   >
-    <span className={priceTextRevealClass}>{isFree ? "FREE" : item.price || "-"}</span>
+    <span className="opacity-100">{isFree ? "FREE" : item.price || "-"}</span>
   </span>
 </div>
 
       <p className="line-clamp-3 text-sm leading-relaxed text-slate-300">{displayDescription || "No description available."}</p>
 
-      <div className={`mt-2.5 flex flex-wrap gap-1.5 ${hoverRevealClass}`}>
+      <div className="mt-2.5 flex flex-wrap gap-1.5 opacity-100">
         {sourceChips.map((s) => (
           <span
             key={`${s.category_slug}-${s.term}`}
@@ -336,7 +340,7 @@ export default function ItemCard({
 
 <div className="mt-auto flex min-w-0 items-center justify-between gap-2 pt-1.5 text-[9px] text-slate-400 md:text-[11px]">
   <div className="flex min-w-0 items-center gap-4">
-          <span className={hoverRevealClass}>{formatDate(item.publish_date)}</span>
+          <span className="opacity-100">{formatDate(item.publish_date)}</span>
           <div className="flex items-center gap-4">
             {showRatingStar ? (
               <span
@@ -434,7 +438,7 @@ export default function ItemCard({
                 event.stopPropagation();
               }}
               style={authorFontSizeStyle}
-              className={`min-w-0 max-w-full truncate inline-flex items-center justify-center gap-1 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-100 transition hover:border-white/40 md:text-[11px] ${hoverRevealClass}`}
+              className="min-w-0 max-w-full truncate inline-flex items-center justify-center gap-1 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-100 transition hover:border-white/40 md:text-[11px] opacity-100"
             >
               {isVipAuthor ? (
                 <svg
@@ -453,7 +457,7 @@ export default function ItemCard({
               {displayAuthor}
             </a>
           ) : (
-            <span style={authorFontSizeStyle} className={hoverRevealClass}>{displayAuthor}</span>
+            <span style={authorFontSizeStyle} className="opacity-100">{displayAuthor}</span>
           )}
 
         </div>

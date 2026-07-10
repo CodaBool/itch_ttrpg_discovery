@@ -1,5 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
 import { franc } from "franc";
+import { prepareNewsletterPreview } from "./newsletter.js";
 
 // Keep in sync with worker/src/index.js
 const PAIR_TAGS = [
@@ -762,6 +763,33 @@ function listMetadata() {
   });
 }
 
+async function newsletterPreview(request, env) {
+  let body = null;
+  try {
+    body = await request.json();
+  } catch {
+    body = {};
+  }
+
+  const rows = await env.DB.prepare(
+    `SELECT
+      url, source, title, description, image_url, price, publish_date, update_date,
+      author, author_url, language, rating, engagement, ai, first_seen_at, updated_at
+     FROM items
+     ORDER BY updated_at DESC
+     LIMIT 6000`
+  ).all();
+
+  const inputItems = rows.results || [];
+  const preview = prepareNewsletterPreview(inputItems, body || {}, new Date());
+
+  return json({
+    count: preview.items.length,
+    items: preview.items,
+    html: preview.html,
+  });
+}
+
 function isAdminAuthorized(request, env) {
   const required = String(env.ADMIN_TOKEN || "").trim();
   if (!required) return true;
@@ -843,6 +871,10 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/api/metadata") {
       return listMetadata();
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/newsletter/preview") {
+      return newsletterPreview(request, env);
     }
 
     if (request.method === "GET" && url.pathname === "/api/admin/searches") {

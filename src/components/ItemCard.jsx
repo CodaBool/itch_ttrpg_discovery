@@ -131,6 +131,54 @@ function hideMetricTooltip() {
   if (tooltip) tooltip.style.display = "none";
 }
 
+function showAuthorTooltip(anchor, text) {
+  if (!anchor || !text || typeof document === "undefined") return;
+
+  const tooltipClassName = "pointer-events-none fixed z-[9999] whitespace-nowrap rounded-xl border border-white/30 bg-slate-900 px-3 py-2 text-lg font-semibold uppercase tracking-[0.08em] text-slate-100 shadow-[0_12px_28px_-12px_rgba(0,0,0,0.85)]";
+
+  let tooltip = document.querySelector("#author-tooltip-global");
+  if (!tooltip) {
+    tooltip = document.createElement("div");
+    tooltip.id = "author-tooltip-global";
+    tooltip.style.display = "none";
+    document.body.appendChild(tooltip);
+  }
+
+  tooltip.className = tooltipClassName;
+
+  const title = document.createElement("div");
+  title.textContent = text;
+
+  const subtitle = document.createElement("div");
+  subtitle.textContent = "itch creator";
+  subtitle.className = "mt-0.5 text-center text-[0.5em] font-medium tracking-[0.12em] opacity-50";
+
+  tooltip.replaceChildren(title, subtitle);
+  tooltip.style.display = "block";
+
+  const gap = 8;
+  const viewportPadding = 8;
+  const anchorRect = anchor.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+
+  let left = anchorRect.right - tooltipRect.width;
+  left = Math.max(viewportPadding, Math.min(left, window.innerWidth - tooltipRect.width - viewportPadding));
+
+  let top = anchorRect.top - tooltipRect.height - gap;
+  if (top < viewportPadding) {
+    top = Math.min(window.innerHeight - tooltipRect.height - viewportPadding, anchorRect.bottom + gap);
+  }
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function hideAuthorTooltip() {
+  if (typeof document === "undefined") return;
+  const tooltip = document.querySelector("#author-tooltip-global");
+  if (tooltip) tooltip.style.display = "none";
+}
+
 export default function ItemCard({
   item,
   isVipAuthor = false,
@@ -351,51 +399,64 @@ export default function ItemCard({
             ) : null}
           </div>
         </div>
-        {item.author_url ? (
-          <a
-            href={item.author_url}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(event) => {
-              if (toolModeEnabled && interactionMode === "ban") {
-                event.preventDefault();
+        <div
+          className="group/author relative min-w-0 max-w-[50%]"
+          onMouseEnter={(event) => showAuthorTooltip(event.currentTarget, displayAuthor)}
+          onMouseLeave={hideAuthorTooltip}
+          onFocusCapture={(event) => showAuthorTooltip(event.currentTarget, displayAuthor)}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) {
+              hideAuthorTooltip();
+            }
+          }}
+        >
+          {item.author_url ? (
+            <a
+              href={item.author_url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(event) => {
+                if (toolModeEnabled && interactionMode === "ban") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onAuthorToolAction?.(item);
+                  return;
+                }
                 event.stopPropagation();
-                onAuthorToolAction?.(item);
-                return;
-              }
-              event.stopPropagation();
-            }}
-            onAuxClick={(event) => {
-              if (toolModeEnabled && interactionMode === "ban") {
-                event.preventDefault();
+              }}
+              onAuxClick={(event) => {
+                if (toolModeEnabled && interactionMode === "ban") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onAuthorToolAction?.(item);
+                  return;
+                }
                 event.stopPropagation();
-                onAuthorToolAction?.(item);
-                return;
-              }
-              event.stopPropagation();
-            }}
-            style={authorFontSizeStyle}
-            className={`min-w-0 max-w-[50%] truncate inline-flex items-center justify-center gap-1 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-100 transition hover:border-white/40 md:text-[11px] ${hoverRevealClass}`}
-          >
-            {isVipAuthor ? (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                xmlSpace="preserve"
-                viewBox="0 0 220 220"
-                className="h-3 w-3 shrink-0 text-amber-300"
-                aria-hidden="true"
-              >
-                <path
-                  fill="currentColor"
-                  d="M220 99a23 23 0 1 0-40 15l-24 22-31-63 18-21-33-39-33 39 17 20-30 64-24-22q6-6 6-15a23 23 0 1 0-26 23l7 85h166l7-85q18-4 20-23"
-                />
-              </svg>
-            ) : null}
-            {displayAuthor}
-          </a>
-        ) : (
-          <span style={authorFontSizeStyle} className={hoverRevealClass}>{displayAuthor}</span>
-        )}
+              }}
+              style={authorFontSizeStyle}
+              className={`min-w-0 max-w-full truncate inline-flex items-center justify-center gap-1 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-100 transition hover:border-white/40 md:text-[11px] ${hoverRevealClass}`}
+            >
+              {isVipAuthor ? (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  xmlSpace="preserve"
+                  viewBox="0 0 220 220"
+                  className="h-3 w-3 shrink-0 text-amber-300"
+                  aria-hidden="true"
+                >
+                  <path
+                    fill="currentColor"
+                    d="M220 99a23 23 0 1 0-40 15l-24 22-31-63 18-21-33-39-33 39 17 20-30 64-24-22q6-6 6-15a23 23 0 1 0-26 23l7 85h166l7-85q18-4 20-23"
+                  />
+                </svg>
+              ) : null}
+              {displayAuthor}
+            </a>
+          ) : (
+            <span style={authorFontSizeStyle} className={hoverRevealClass}>{displayAuthor}</span>
+          )}
+
+        </div>
       </div>
     </article>
   );

@@ -21,3 +21,4 @@ mostly ai slop
 - Print & Play
 - storygame
 - X < Word RPG
+- there are popular business card or light hearted jams which I don't link to in the jams page

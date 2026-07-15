@@ -25,7 +25,14 @@ const JAM_ENTRIES = [
     signal: "39 entries / 663 ratings",
     description: "Mothership trifolds",
   },
-
+  {
+    year: 2026,
+    title: "Summer Jam",
+    url: "https://itch.io/jam/liminal-horror-summer-jam-2026",
+    entries: null,
+    signal: "ongoing",
+    description: "Liminal Horror",
+  },
   {
     year: 2026,
     title: "Mini-Campaign",

@@ -458,6 +458,7 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
                   <p className="text-lg text-slate-200 mt-2">The following are under represented</p>
                   <div className="flex flex-wrap gap-2">
                     <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">solo</span>
+                    <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">journaling</span>
                     <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">larp</span>
                     <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">D&amp;D</span>
                     <span className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200">Pathfinder</span>

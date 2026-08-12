@@ -20,7 +20,8 @@ export const SYSTEM_TAGS_BY_KEY = {
   "public-access": ["public-access"],
 };
 
-const DEFAULT_LEVEL = 4;
+const DEFAULT_LEVEL = 1;
+const DEFAULT_MIN_RATINGS = 5;
 const NEWSLETTER_PREFERENCES_BASE_URL = "https://discover.codabool.workers.dev/";
 
 // Keep this mapping in sync with frontend query parsing.
@@ -78,7 +79,7 @@ function normalizePreferenceForNewsletter(rawPreference = {}) {
     englishOnly: rawPreference.englishOnly !== false,
     minRatings: Number.isFinite(Number(rawPreference.minRatings))
       ? Math.max(0, Math.min(10, Math.floor(Number(rawPreference.minRatings))))
-      : 1,
+      : DEFAULT_MIN_RATINGS,
     addGameAssets: rawPreference.addGameAssets !== false,
     addToolsMiscGameMods: rawPreference.addToolsMiscGameMods !== false,
     excludedCreators: normalizeExcludedCreators(rawPreference.excludedCreators),
@@ -328,7 +329,7 @@ export function filterNewsletterItems(items, rawPreference = {}, now = new Date(
     englishOnly: rawPreference.englishOnly !== false,
     minRatings: Number.isFinite(Number(rawPreference.minRatings))
       ? Math.max(0, Math.min(10, Math.floor(Number(rawPreference.minRatings))))
-      : 1,
+      : DEFAULT_MIN_RATINGS,
     addGameAssets: rawPreference.addGameAssets !== false,
     addToolsMiscGameMods: rawPreference.addToolsMiscGameMods !== false,
     excludedCreators: Array.isArray(rawPreference.excludedCreators)
@@ -513,9 +514,9 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
     <div style="max-width:1200px; margin:0 auto; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
       <div style="padding:20px 18px 12px 18px; font-family: Arial, sans-serif; color:#0f172a;">
         <h1 style="margin:0; font-size:30px; line-height:1.2;">${escapeHtml(preference.title)}</h1>
-        <p style="margin:8px 0 0 0; color:#475569; font-size:13px;">Fresh items from the last 30 days, matched to your interests.</p>
+        <p style="margin:8px 0 0 0; color:#475569; font-size:13px;">From the last 30 days</p>
         <div style="margin-top:12px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; border:1px solid #cbd5e1; border-radius:10px; background:#ffffff; padding:12px 14px;">
-          <p style="margin:0; color:#0f172a; font-size:15px; font-weight:700;">${escapeHtml(String(uniqueArtistCount))} indie artists made something up your alley this month!</p>
+          <p style="margin:0; color:#0f172a; font-size:15px; font-weight:700;">${escapeHtml(String(uniqueArtistCount))} artists made something right up your alley!</p>
           <a href="${escapeHtml(tweakPreferencesUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; justify-content:center; border:1px solid #0f172a; border-radius:10px; padding:9px 12px; text-decoration:none; color:#0f172a; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;">
             Tweak preferences
           </a>

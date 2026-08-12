@@ -4,5 +4,6 @@
 - use this search path https://itch.io/search?type=jams&jam_state=finished&q=author+or+title
 
 # todo
-- the email should show rating + interaction number & symbol
-- the email should have a top button saying "N indie artists made something up your alley this month!" "Tweak preferences". Use a long query to set if on new browser.
+- awards in newsletter
+- make sure we are having the newsletter work correctly
+- default to 3 maybe?

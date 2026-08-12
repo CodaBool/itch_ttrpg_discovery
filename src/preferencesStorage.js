@@ -1,19 +1,22 @@
 export const DRAFT_STORAGE_KEY = "itch-feed:newsletter-draft";
 
+const DEFAULT_SYSTEM_SCORE = 1;
+const DEFAULT_MIN_RATINGS = 5;
+
 function normalizeSystems(defaultSystems, incomingSystems) {
   const source = incomingSystems && typeof incomingSystems === "object" ? incomingSystems : {};
 
   return Object.fromEntries(
     Object.keys(defaultSystems).map((key) => {
       const raw = Number(source[key]);
-      const fallback = defaultSystems[key] ?? 4;
+      const fallback = defaultSystems[key] ?? DEFAULT_SYSTEM_SCORE;
       const clamped = Number.isFinite(raw) ? Math.min(5, Math.max(0, Math.round(raw))) : fallback;
       return [key, clamped];
     })
   );
 }
 
-export function makeDefaultSystemScores(systems, defaultScore = 4) {
+export function makeDefaultSystemScores(systems, defaultScore = DEFAULT_SYSTEM_SCORE) {
   return Object.fromEntries(systems.map((system) => [system.key, defaultScore]));
 }
 
@@ -23,7 +26,7 @@ export function loadPreferenceDraft(defaultSystems) {
     systems: defaultSystems,
     majorAwards: true,
     englishOnly: true,
-    minRatings: 1,
+    minRatings: DEFAULT_MIN_RATINGS,
     addGameAssets: true,
     addToolsMiscGameMods: true,
     excludedCreators: [],
@@ -45,7 +48,7 @@ export function loadPreferenceDraft(defaultSystems) {
       englishOnly: parsed.englishOnly !== false,
       minRatings: Number.isFinite(Number(parsed.minRatings))
         ? Math.max(0, Math.min(10, Math.floor(Number(parsed.minRatings))))
-        : 1,
+        : DEFAULT_MIN_RATINGS,
       addGameAssets: parsed.addGameAssets !== false,
       addToolsMiscGameMods: parsed.addToolsMiscGameMods !== false,
       excludedCreators: Array.isArray(parsed.excludedCreators)

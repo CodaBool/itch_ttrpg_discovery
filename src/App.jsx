@@ -87,13 +87,13 @@ function parseQueryFlag(value, fallback) {
     return fallback;
 }
 
-function parseQueryLevel(value, fallback = 4) {
+function parseQueryLevel(value, fallback = 1) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return fallback;
     return Math.max(0, Math.min(5, Math.floor(parsed)));
 }
 
-function parseQueryMinRating(value, fallback = 1) {
+function parseQueryMinRating(value, fallback = 5) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return fallback;
     return Math.max(0, Math.min(10, Math.floor(parsed)));
@@ -140,7 +140,7 @@ function readDraftFromQuery(defaultSystems, searchParams) {
         systems,
         majorAwards: parseQueryFlag(awardRaw, true),
         englishOnly: parseQueryFlag(enRaw, true),
-        minRatings: parseQueryMinRating(minRaw, 1),
+        minRatings: parseQueryMinRating(minRaw, 5),
         addGameAssets: parseQueryFlag(assetRaw, true),
         addToolsMiscGameMods: parseQueryFlag(miscRaw, true),
         excludedCreators: parseQueryExcludedCreators(excludeRaw),
@@ -433,7 +433,7 @@ export default function App() {
             return Math.max(0, Math.min(10, Math.floor(draftValue)));
         }
 
-        return loadStoredNumber(STORAGE_KEYS.minRatings, 1, 0, 10);
+        return loadStoredNumber(STORAGE_KEYS.minRatings, 5, 0, 10);
     });
 
     useEffect(() => {
@@ -447,7 +447,7 @@ export default function App() {
         setMinRatings(
             Number.isFinite(latestMinRatings)
                 ? Math.max(0, Math.min(10, Math.floor(latestMinRatings)))
-                : 1
+                : 5
         );
         setBlockedAuthors(Array.isArray(latest.excludedCreators) ? latest.excludedCreators : []);
     }, [activePage, defaultSystems]);
@@ -860,7 +860,7 @@ export default function App() {
 
                             <label className="block rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
                                 <div className="mb-2 flex items-center justify-between gap-3">
-                                    <span className="font-semibold uppercase tracking-[0.12em]">Minimum score for everything else</span>
+                                    <span className="font-semibold uppercase tracking-[0.12em]">Minimum number of ratings for everything else</span>
                                     <span className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-200">{minRatings}</span>
                                 </div>
                                 <input

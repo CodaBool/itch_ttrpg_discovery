@@ -57,7 +57,7 @@ export default function NewsletterBuilder({ onBack, systems = [], initialDraft =
   const [englishOnly, setEnglishOnly] = useState(resolvedInitialDraft.englishOnly);
   const [minRatings, setMinRatings] = useState(() => {
     const value = Number(resolvedInitialDraft.minRatings);
-    if (!Number.isFinite(value)) return 1;
+    if (!Number.isFinite(value)) return 5;
     return Math.max(0, Math.min(10, Math.floor(value)));
   });
   const [addGameAssets, setAddGameAssets] = useState(resolvedInitialDraft.addGameAssets);
@@ -336,7 +336,7 @@ export default function NewsletterBuilder({ onBack, systems = [], initialDraft =
 
             <label className="block rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="font-semibold uppercase tracking-[0.12em]">Minimum score for everything else</span>
+                <span className="font-semibold uppercase tracking-[0.12em]">Minimum number of ratings for everything else</span>
                 <span className="text-xs font-semibold uppercase tracking-[0.12em] text-cyan-100">{minRatings}</span>
               </div>
               <input

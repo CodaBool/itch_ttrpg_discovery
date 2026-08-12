@@ -163,7 +163,6 @@ function bootstrapPreferencesFromQuery(defaultSystems) {
         return {
             draft: existingDraft,
             initialPage: "discover",
-            shouldPersistQueryDraft: false,
         };
     }
 
@@ -176,14 +175,12 @@ function bootstrapPreferencesFromQuery(defaultSystems) {
         return {
             draft: draftFromQuery,
             initialPage: "newsletter",
-            shouldPersistQueryDraft: true,
         };
     }
 
     return {
         draft: loadPreferenceDraft(defaultSystems),
         initialPage: shouldOpenNewsletter ? "newsletter" : "discover",
-        shouldPersistQueryDraft: false,
     };
 }
 
@@ -411,7 +408,6 @@ export default function App() {
     const defaultSystems = useMemo(() => makeDefaultSystemScores(SYSTEM_FILTERS), []);
     const bootstrap = useMemo(() => bootstrapPreferencesFromQuery(defaultSystems), [defaultSystems]);
     const draft = bootstrap.draft;
-    const shouldPersistQueryDraft = bootstrap.shouldPersistQueryDraft;
     const [activePage, setActivePage] = useState(bootstrap.initialPage);
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -439,15 +435,6 @@ export default function App() {
 
         return loadStoredNumber(STORAGE_KEYS.minRatings, 1, 0, 10);
     });
-
-    useEffect(() => {
-        if (!shouldPersistQueryDraft || typeof window === "undefined") return;
-
-        savePreferenceDraft(draft);
-        window.localStorage.setItem(STORAGE_KEYS.blockedAuthors, JSON.stringify(draft.excludedCreators));
-        window.localStorage.setItem(STORAGE_KEYS.hideNonEnglish, JSON.stringify(draft.englishOnly));
-        window.localStorage.setItem(STORAGE_KEYS.minRatings, JSON.stringify(draft.minRatings));
-    }, [shouldPersistQueryDraft, draft]);
 
     useEffect(() => {
         if (activePage !== "discover") return;
@@ -774,6 +761,7 @@ export default function App() {
             <NewsletterBuilder
                 onBack={() => setActivePage("discover")}
                 systems={SYSTEM_FILTERS}
+                initialDraft={draft}
             />
         );
     }

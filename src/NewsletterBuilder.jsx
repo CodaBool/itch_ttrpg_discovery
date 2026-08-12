@@ -29,24 +29,42 @@ function normalizeCreatorName(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-export default function NewsletterBuilder({ onBack, systems = [] }) {
+export default function NewsletterBuilder({ onBack, systems = [], initialDraft = null }) {
   const defaultSystems = useMemo(() => makeDefaultSystemScores(systems), [systems]);
   const draft = useMemo(() => loadPreferenceDraft(defaultSystems), [defaultSystems]);
+  const resolvedInitialDraft = useMemo(() => {
+    if (!initialDraft || typeof initialDraft !== "object") return draft;
 
-  const [email, setEmail] = useState(draft.email);
-  const [systemScores, setSystemScores] = useState(draft.systems);
-  const [majorAwards, setMajorAwards] = useState(draft.majorAwards);
-  const [englishOnly, setEnglishOnly] = useState(draft.englishOnly);
+    return {
+      email: String(initialDraft.email || "").trim(),
+      systems: initialDraft.systems && typeof initialDraft.systems === "object" ? initialDraft.systems : draft.systems,
+      majorAwards: initialDraft.majorAwards !== false,
+      englishOnly: initialDraft.englishOnly !== false,
+      minRatings: Number.isFinite(Number(initialDraft.minRatings))
+        ? Math.max(0, Math.min(10, Math.floor(Number(initialDraft.minRatings))))
+        : draft.minRatings,
+      addGameAssets: initialDraft.addGameAssets !== false,
+      addToolsMiscGameMods: initialDraft.addToolsMiscGameMods !== false,
+      excludedCreators: Array.isArray(initialDraft.excludedCreators)
+        ? initialDraft.excludedCreators.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean)
+        : draft.excludedCreators,
+    };
+  }, [initialDraft, draft]);
+
+  const [email, setEmail] = useState(resolvedInitialDraft.email);
+  const [systemScores, setSystemScores] = useState(resolvedInitialDraft.systems);
+  const [majorAwards, setMajorAwards] = useState(resolvedInitialDraft.majorAwards);
+  const [englishOnly, setEnglishOnly] = useState(resolvedInitialDraft.englishOnly);
   const [minRatings, setMinRatings] = useState(() => {
-    const value = Number(draft.minRatings);
+    const value = Number(resolvedInitialDraft.minRatings);
     if (!Number.isFinite(value)) return 1;
     return Math.max(0, Math.min(10, Math.floor(value)));
   });
-  const [addGameAssets, setAddGameAssets] = useState(draft.addGameAssets);
-  const [addToolsMiscGameMods, setAddToolsMiscGameMods] = useState(draft.addToolsMiscGameMods);
+  const [addGameAssets, setAddGameAssets] = useState(resolvedInitialDraft.addGameAssets);
+  const [addToolsMiscGameMods, setAddToolsMiscGameMods] = useState(resolvedInitialDraft.addToolsMiscGameMods);
   const [excludedCreators, setExcludedCreators] = useState(() => {
     const blocked = loadStoredArray(STORAGE_KEYS.blockedAuthors);
-    return Array.from(new Set([...blocked, ...draft.excludedCreators]));
+    return Array.from(new Set([...blocked, ...resolvedInitialDraft.excludedCreators]));
   });
   const [previewHtml, setPreviewHtml] = useState("");
   const [previewCount, setPreviewCount] = useState(0);

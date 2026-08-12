@@ -318,7 +318,7 @@ export default function NewsletterBuilder({ onBack, systems = [] }) {
 
             <label className="block rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="font-semibold uppercase tracking-[0.12em]">Minimum rating for everything else</span>
+                <span className="font-semibold uppercase tracking-[0.12em]">Minimum score for everything else</span>
                 <span className="text-xs font-semibold uppercase tracking-[0.12em] text-cyan-100">{minRatings}</span>
               </div>
               <input

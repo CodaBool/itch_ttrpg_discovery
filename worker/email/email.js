@@ -155,6 +155,7 @@ async function sendForSubscription(env, items, subscription, now = new Date()) {
 
   const preview = prepareNewsletterPreview(items, {
     ...preference,
+    email,
     title: preference.title || "Your Indie TTRPG Digest",
   }, now);
 

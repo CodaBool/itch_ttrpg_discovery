@@ -1,4 +1,4 @@
-const DRAFT_STORAGE_KEY = "itch-feed:newsletter-draft";
+export const DRAFT_STORAGE_KEY = "itch-feed:newsletter-draft";
 
 function normalizeSystems(defaultSystems, incomingSystems) {
   const source = incomingSystems && typeof incomingSystems === "object" ? incomingSystems : {};
@@ -55,6 +55,11 @@ export function loadPreferenceDraft(defaultSystems) {
   } catch {
     return fallback;
   }
+}
+
+export function hasStoredPreferenceDraft() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(DRAFT_STORAGE_KEY) != null;
 }
 
 export function savePreferenceDraft(payload) {

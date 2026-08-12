@@ -5,7 +5,7 @@ import PreferenceForm from "./components/PreferenceForm";
 import Jams from "./Jams";
 import NewsletterBuilder from "./NewsletterBuilder";
 import { banAuthor, banUrl, createAdminClientFromEnv, isAdminEnabled } from "./admin";
-import { loadPreferenceDraft, makeDefaultSystemScores, savePreferenceDraft } from "./preferencesStorage";
+import { hasStoredPreferenceDraft, loadPreferenceDraft, makeDefaultSystemScores, savePreferenceDraft } from "./preferencesStorage";
 
 
 
@@ -58,6 +58,134 @@ const SYSTEM_TAGS_BY_KEY = Object.fromEntries(
 
 const VIP_AUTHORS = ["goblinarchives", "tombloom", "massif-press", "claymorerpgs"];
 const HIDDEN_SOURCE_TERMS = ["ttrpg", "tabletop"];
+const NEWSLETTER_PAGE_QUERY_VALUE = "newsletter";
+
+const QUERY_SYSTEM_KEY_BY_PARAM = {
+    lh: "liminal-horror",
+    mosh: "mothership",
+    mb: "mork-borg",
+    dg: "delta-green",
+    coc: "call-of-cthulhu",
+    ta: "triangle-agency",
+    m: "mausritter",
+    cairn: "cairn",
+    odd: "into-the-odd",
+    fist: "fist",
+    b: "brindlewood",
+    eb: "electric-bastionland",
+    cain: "cain",
+    td: "trophy-dark",
+    pa: "public-access",
+};
+
+function parseQueryFlag(value, fallback) {
+    if (value == null || value === "") return fallback;
+
+    const normalized = String(value).trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) return true;
+    if (["0", "false", "no", "off"].includes(normalized)) return false;
+    return fallback;
+}
+
+function parseQueryLevel(value, fallback = 4) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(0, Math.min(5, Math.floor(parsed)));
+}
+
+function parseQueryMinRating(value, fallback = 1) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(0, Math.min(10, Math.floor(parsed)));
+}
+
+function parseQueryExcludedCreators(value) {
+    if (value == null) return [];
+
+    return String(value)
+        .split(",")
+        .map((entry) => entry.trim().toLowerCase())
+        .filter(Boolean);
+}
+
+function hasAnyLocalPreferenceData() {
+    if (typeof window === "undefined") return false;
+    if (hasStoredPreferenceDraft()) return true;
+
+    return Object.values(STORAGE_KEYS).some((key) => window.localStorage.getItem(key) != null);
+}
+
+function readDraftFromQuery(defaultSystems, searchParams) {
+    const systems = { ...defaultSystems };
+    let hasQueryPreferences = false;
+
+    Object.entries(QUERY_SYSTEM_KEY_BY_PARAM).forEach(([paramKey, systemKey]) => {
+        const rawValue = searchParams.get(paramKey);
+        if (rawValue == null) return;
+
+        systems[systemKey] = parseQueryLevel(rawValue, systems[systemKey]);
+        hasQueryPreferences = true;
+    });
+
+    const minRaw = searchParams.get("min");
+    const enRaw = searchParams.get("en");
+    const emailRaw = searchParams.get("email");
+    const awardRaw = searchParams.get("award");
+    const assetRaw = searchParams.get("asset");
+    const miscRaw = searchParams.get("misc");
+    const excludeRaw = searchParams.get("exclude");
+
+    const draftFromQuery = {
+        email: String(emailRaw || "").trim().toLowerCase(),
+        systems,
+        majorAwards: parseQueryFlag(awardRaw, true),
+        englishOnly: parseQueryFlag(enRaw, true),
+        minRatings: parseQueryMinRating(minRaw, 1),
+        addGameAssets: parseQueryFlag(assetRaw, true),
+        addToolsMiscGameMods: parseQueryFlag(miscRaw, true),
+        excludedCreators: parseQueryExcludedCreators(excludeRaw),
+    };
+
+    if (minRaw != null || enRaw != null || emailRaw != null || awardRaw != null || assetRaw != null || miscRaw != null || excludeRaw != null) {
+        hasQueryPreferences = true;
+    }
+
+    return {
+        hasQueryPreferences,
+        draftFromQuery,
+    };
+}
+
+function bootstrapPreferencesFromQuery(defaultSystems) {
+    const existingDraft = loadPreferenceDraft(defaultSystems);
+
+    if (typeof window === "undefined") {
+        return {
+            draft: existingDraft,
+            initialPage: "discover",
+            shouldPersistQueryDraft: false,
+        };
+    }
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const page = String(searchParams.get("page") || "").trim().toLowerCase();
+    const shouldOpenNewsletter = page === NEWSLETTER_PAGE_QUERY_VALUE;
+
+    const { hasQueryPreferences, draftFromQuery } = readDraftFromQuery(defaultSystems, searchParams);
+    if (shouldOpenNewsletter && hasQueryPreferences && !hasAnyLocalPreferenceData()) {
+        return {
+            draft: draftFromQuery,
+            initialPage: "newsletter",
+            shouldPersistQueryDraft: true,
+        };
+    }
+
+    return {
+        draft: loadPreferenceDraft(defaultSystems),
+        initialPage: shouldOpenNewsletter ? "newsletter" : "discover",
+        shouldPersistQueryDraft: false,
+    };
+}
 
 function loadStoredCategoryValue() {
     const allowed = CATEGORY_OPTIONS.map((option) => option.slug);
@@ -281,8 +409,10 @@ const BUCKET_ORDER = ["last-30", "last-365", "over-365"];
 export default function App() {
     const hasAdminToken = isAdminEnabled();
     const defaultSystems = useMemo(() => makeDefaultSystemScores(SYSTEM_FILTERS), []);
-    const draft = useMemo(() => loadPreferenceDraft(defaultSystems), [defaultSystems]);
-    const [activePage, setActivePage] = useState("discover");
+    const bootstrap = useMemo(() => bootstrapPreferencesFromQuery(defaultSystems), [defaultSystems]);
+    const draft = bootstrap.draft;
+    const shouldPersistQueryDraft = bootstrap.shouldPersistQueryDraft;
+    const [activePage, setActivePage] = useState(bootstrap.initialPage);
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -309,6 +439,15 @@ export default function App() {
 
         return loadStoredNumber(STORAGE_KEYS.minRatings, 1, 0, 10);
     });
+
+    useEffect(() => {
+        if (!shouldPersistQueryDraft || typeof window === "undefined") return;
+
+        savePreferenceDraft(draft);
+        window.localStorage.setItem(STORAGE_KEYS.blockedAuthors, JSON.stringify(draft.excludedCreators));
+        window.localStorage.setItem(STORAGE_KEYS.hideNonEnglish, JSON.stringify(draft.englishOnly));
+        window.localStorage.setItem(STORAGE_KEYS.minRatings, JSON.stringify(draft.minRatings));
+    }, [shouldPersistQueryDraft, draft]);
 
     useEffect(() => {
         if (activePage !== "discover") return;
@@ -733,7 +872,7 @@ export default function App() {
 
                             <label className="block rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
                                 <div className="mb-2 flex items-center justify-between gap-3">
-                                    <span className="font-semibold uppercase tracking-[0.12em]">Minimum rating for everything else</span>
+                                    <span className="font-semibold uppercase tracking-[0.12em]">Minimum score for everything else</span>
                                     <span className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-200">{minRatings}</span>
                                 </div>
                                 <input

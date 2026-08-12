@@ -21,6 +21,26 @@ export const SYSTEM_TAGS_BY_KEY = {
 };
 
 const DEFAULT_LEVEL = 4;
+const NEWSLETTER_PREFERENCES_BASE_URL = "https://discover.codabool.workers.dev/";
+
+// Keep this mapping in sync with frontend query parsing.
+const QUERY_PARAM_BY_SYSTEM_KEY = {
+  "liminal-horror": "lh",
+  mothership: "mosh",
+  "mork-borg": "mb",
+  "delta-green": "dg",
+  "call-of-cthulhu": "coc",
+  "triangle-agency": "ta",
+  mausritter: "m",
+  cairn: "cairn",
+  "into-the-odd": "odd",
+  fist: "fist",
+  brindlewood: "b",
+  "electric-bastionland": "eb",
+  cain: "cain",
+  "trophy-dark": "td",
+  "public-access": "pa",
+};
 
 const LEVEL_REQUIREMENTS = {
   0: { minPositive: Number.POSITIVE_INFINITY, minEngagement: Number.POSITIVE_INFINITY },
@@ -39,6 +59,57 @@ function coerceLevel(value) {
 
 function normalizeAuthor(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeExcludedCreators(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map(normalizeAuthor).filter(Boolean);
+}
+
+function normalizePreferenceForNewsletter(rawPreference = {}) {
+  return {
+    title: String(rawPreference.title || "Your Indie TTRPG Digest").trim() || "Your Indie TTRPG Digest",
+    systems: normalizeSystemScores(rawPreference.systems),
+    majorAwards: rawPreference.majorAwards !== false,
+    englishOnly: rawPreference.englishOnly !== false,
+    minRatings: Number.isFinite(Number(rawPreference.minRatings))
+      ? Math.max(0, Math.min(10, Math.floor(Number(rawPreference.minRatings))))
+      : 1,
+    addGameAssets: rawPreference.addGameAssets !== false,
+    addToolsMiscGameMods: rawPreference.addToolsMiscGameMods !== false,
+    excludedCreators: normalizeExcludedCreators(rawPreference.excludedCreators),
+    email: normalizeEmail(rawPreference.email),
+  };
+}
+
+function buildTweakPreferencesUrl(preference) {
+  const normalizedPreference = normalizePreferenceForNewsletter(preference);
+  const params = new URLSearchParams();
+  params.set("page", "newsletter");
+
+  Object.entries(QUERY_PARAM_BY_SYSTEM_KEY).forEach(([systemKey, queryKey]) => {
+    params.set(queryKey, String(coerceLevel(normalizedPreference.systems[systemKey])));
+  });
+
+  params.set("min", String(normalizedPreference.minRatings));
+  params.set("en", normalizedPreference.englishOnly ? "1" : "0");
+  params.set("award", normalizedPreference.majorAwards ? "1" : "0");
+  params.set("asset", normalizedPreference.addGameAssets ? "1" : "0");
+  params.set("misc", normalizedPreference.addToolsMiscGameMods ? "1" : "0");
+
+  if (normalizedPreference.email) {
+    params.set("email", normalizedPreference.email);
+  }
+
+  if (normalizedPreference.excludedCreators.length) {
+    params.set("exclude", normalizedPreference.excludedCreators.join(","));
+  }
+
+  return `${NEWSLETTER_PREFERENCES_BASE_URL}?${params.toString()}`;
 }
 
 function parseSourceArray(rawSource) {
@@ -311,13 +382,19 @@ export function filterNewsletterItems(items, rawPreference = {}, now = new Date(
 }
 
 export function buildNewsletterHtml(items, rawPreference = {}) {
-  const preference = {
-    title: String(rawPreference.title || "Your Indie TTRPG Digest").trim() || "Your Indie TTRPG Digest",
-  };
+  const preference = normalizePreferenceForNewsletter(rawPreference);
+  const tweakPreferencesUrl = buildTweakPreferencesUrl(preference);
+  const uniqueArtistCount = new Set(items.map((item) => normalizeAuthor(item.author)).filter(Boolean)).size;
 
   const cardsHtml = items.map((item) => {
     const sourceArray = parseSourceArray(item.source);
     const tags = sourceTagsForDisplay(sourceArray).slice(0, 6);
+    const { average: ratingAverage, count: ratingCount } = ratingMetrics(item.rating);
+    const engagementMetric = engagementCount(item);
+    const showRatingMetric = ratingAverage >= 4 && ratingCount > 0;
+    const showEngagementMetric = engagementMetric > 0;
+    const shouldAnimateRating = ratingCount > 5;
+    const shouldAnimateEngagement = engagementMetric > 6;
     const displayTitle = truncateText(decodeHtmlEntities(item.title || "Untitled"), 90);
     const description = truncateText(
       decodeHtmlEntities(String(item.description || "No description available.").trim()),
@@ -354,6 +431,22 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
             ${escapeHtml(formatDate(item.publish_date || item.update_date || item.first_seen_at || item.updated_at))} &nbsp;|&nbsp;
             ${escapeHtml(item.price || "-")}
           </div>
+          ${showRatingMetric || showEngagementMetric ? `
+            <div style="display:flex; align-items:center; gap:12px; padding-bottom:10px; color:#334155; font-size:12px; font-weight:700;">
+              ${showRatingMetric ? `
+                <span style="display:inline-flex; align-items:center; gap:6px; color:#dc2626;">
+                  <span style="font-size:14px; line-height:1; ${shouldAnimateRating ? "display:inline-block;" : ""}" class="${shouldAnimateRating ? "metric-bounce" : ""}">★</span>
+                  <span>${escapeHtml(String(ratingCount))}</span>
+                </span>
+              ` : ""}
+              ${showEngagementMetric ? `
+                <span style="display:inline-flex; align-items:center; gap:6px; color:#d97706;">
+                  <span style="font-size:14px; line-height:1; ${shouldAnimateEngagement ? "display:inline-block;" : ""}" class="${shouldAnimateEngagement ? "metric-bounce" : ""}">🔥</span>
+                  <span>${escapeHtml(String(engagementMetric))}</span>
+                </span>
+              ` : ""}
+            </div>
+          ` : ""}
           ${tags.length ? `
             <div>
               ${tags
@@ -400,6 +493,20 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
           grid-template-columns: minmax(0, 1fr);
         }
       }
+
+      .metric-bounce {
+        animation: metric-bounce 1.3s ease-in-out infinite;
+      }
+
+      @keyframes metric-bounce {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-2px);
+        }
+      }
     </style>
   </head>
   <body style="margin:0; padding:24px 12px; background:#f1f5f9;">
@@ -407,6 +514,12 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
       <div style="padding:20px 18px 12px 18px; font-family: Arial, sans-serif; color:#0f172a;">
         <h1 style="margin:0; font-size:30px; line-height:1.2;">${escapeHtml(preference.title)}</h1>
         <p style="margin:8px 0 0 0; color:#475569; font-size:13px;">Fresh items from the last 30 days, matched to your interests.</p>
+        <div style="margin-top:12px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; border:1px solid #cbd5e1; border-radius:10px; background:#ffffff; padding:12px 14px;">
+          <p style="margin:0; color:#0f172a; font-size:15px; font-weight:700;">${escapeHtml(String(uniqueArtistCount))} indie artists made something up your alley this month!</p>
+          <a href="${escapeHtml(tweakPreferencesUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; justify-content:center; border:1px solid #0f172a; border-radius:10px; padding:9px 12px; text-decoration:none; color:#0f172a; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;">
+            Tweak preferences
+          </a>
+        </div>
       </div>
       <div style="padding:0 18px 18px 18px;">
         <div class="cards-grid">

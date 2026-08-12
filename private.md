@@ -6,4 +6,3 @@
 # todo
 - awards in newsletter
 - make sure we are having the newsletter work correctly
-- default to 3 maybe?

@@ -442,15 +442,36 @@ async function runSingleSearch(env, search, options = {}) {
     });
 
     if (!response.ok) {
+      const body = await response.text().catch(() => "");
       summary.failures.push({
         fetched_url: search.fetchedUrl,
         status: response.status,
+        content_type: response.headers.get("content-type"),
+        snippet: body.slice(0, 200),
       });
       summary.finished_at = new Date().toISOString();
       return summary;
     }
 
     const xml = await response.text();
+    summary.http_status = response.status;
+    summary.response_bytes = xml.length;
+    summary.final_url = response.url;
+
+    // A 200 HTML page (e.g. a bot challenge) would otherwise parse as zero items.
+    const looksLikeXml = /^\s*</.test(xml) && (xml.includes("<rss") || xml.includes("<feed"));
+    if (!looksLikeXml) {
+      summary.failures.push({
+        fetched_url: search.fetchedUrl,
+        status: response.status,
+        error: "Non-XML response",
+        content_type: response.headers.get("content-type"),
+        snippet: xml.slice(0, 200),
+      });
+      summary.finished_at = new Date().toISOString();
+      return summary;
+    }
+
     const parsedItems = parseXmlItems(xml, search.fetchedUrl);
     summary.items_seen = parsedItems.length;
 
@@ -675,6 +696,7 @@ async function listItems(request, env) {
       url, source, title, description, image_url, price, publish_date, update_date,
       author, author_url, language, rating, engagement, ai, first_seen_at, updated_at
      FROM items
+     WHERE removed_at IS NULL
      ORDER BY updated_at DESC
      LIMIT ? OFFSET ?`
   )
@@ -835,6 +857,7 @@ async function newsletterPreview(request, env) {
       url, source, title, description, image_url, price, publish_date, update_date,
       author, author_url, language, rating, engagement, ai, first_seen_at, updated_at
      FROM items
+     WHERE removed_at IS NULL
      ORDER BY updated_at DESC
      LIMIT 6000`
   ).all();
@@ -997,6 +1020,27 @@ export default {
   },
 
   async scheduled(_event, env, ctx) {
-    ctx.waitUntil(runIngestionStep(env));
+    ctx.waitUntil(
+      runIngestionStep(env)
+        .then((summary) => {
+          const log = summary.failures?.length ? console.warn : console.log;
+          log(JSON.stringify({
+            event: "ingest_step",
+            index: summary.processed_index,
+            total: summary.total_searches,
+            url: summary.processed_search?.fetched_url,
+            status: summary.http_status ?? summary.failures?.[0]?.status ?? null,
+            bytes: summary.response_bytes ?? null,
+            items_seen: summary.items_seen,
+            inserted: summary.inserted,
+            updated: summary.updated,
+            skipped_banned: summary.skipped_banned,
+            failures: summary.failures,
+          }));
+        })
+        .catch((error) => {
+          console.error(JSON.stringify({ event: "ingest_step_error", error: String(error?.stack || error) }));
+        })
+    );
   },
 };

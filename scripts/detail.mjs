@@ -3,37 +3,12 @@ import cld from "cld";
 import { pathToFileURL } from "node:url";
 import {
   CloudflareD1Client,
-  deriveDetailMetrics,
-  shouldRemoveForLowRating,
+  DETAIL_ACTIONS,
+  applyDetailResult,
   sleep,
   toBool,
   toInt,
 } from "../worker/detail/shared.js";
-
-const DETAIL_EXCLUDED_TAGS = new Set([
-  "vtt-battlemaps",
-  "foundry-vtt",
-  "solo-rpg",
-  "solo-rpgs",
-  "solo",
-  "solo-game",
-  "solo-games",
-  "solo-ttrpg",
-  "singleplayer",
-  "single-player",
-  "singleplayer-rpg",
-  "singleplayer-ttrpg",
-  "single-player-ttrpg",
-  "journaling",
-  "journaling-rpg",
-  "dnd5e",
-  "dungeons-and-dragsons",
-  "larp",
-  "pathfinder",
-  "diceless",
-  "gm-less",
-  "lancer",
-]);
 
 function mustEnv(name) {
   const value = process.env[name];
@@ -41,26 +16,6 @@ function mustEnv(name) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value.trim();
-}
-
-function hasStrongRatingAndEngagement(rating, engagement) {
-  const value = String(rating || "").trim();
-  if (!value.includes("over")) return false;
-
-  const parts = value.split("over");
-  if (parts.length !== 2) return false;
-
-  const average = Number(parts[0]);
-  const count = Number(parts[1]);
-  const positiveCount = Number.isFinite(average) && average >= 4 && Number.isFinite(count)
-    ? Math.max(0, Math.floor(count))
-    : 0;
-
-  const engagementCount = Number.isFinite(Number(engagement))
-    ? Math.max(0, Math.floor(Number(engagement)))
-    : 0;
-
-  return positiveCount >= 3 && engagementCount >= 1;
 }
 
 export async function openBrowserSession() {
@@ -147,7 +102,7 @@ export async function scrapeDetail(page, url) {
     };
   });
 }
-export async function detectLanguageIso3(rawText) {
+export async function detectLanguage(rawText) {
   const normalized = String(rawText || "").replace(/\s+/g, " ").trim();
   if (!normalized) return null;
 
@@ -225,15 +180,17 @@ export async function fetchAllUrls(d1, { startOffset, maxItems, queryBatchSize }
     const limit = Math.min(queryBatchSize, remaining);
 
     const rows = await d1.query(
-      "SELECT url FROM items ORDER BY first_seen_at ASC LIMIT ? OFFSET ?",
+      "SELECT url, removed_reason FROM items ORDER BY first_seen_at ASC LIMIT ? OFFSET ?",
       [limit, offset]
     );
 
     if (rows.length === 0) break;
 
     for (const row of rows) {
-      const url = String(row.url || "").trim();
-      collected.push(url);
+      collected.push({
+        url: String(row.url || "").trim(),
+        removedReason: row.removed_reason || null,
+      });
     }
 
     offset += rows.length;
@@ -306,14 +263,9 @@ export async function runParallelDetailScrape() {
 
   const counters = {
     seen: 0,
-    updated: 0,
-    removedLowRating: 0,
-    removedAiAssisted: 0,
-    removedExcludedTag: 0,
-    failed: 0,
     skipped: 0,
-    removed404: 0,
     completedBatches: 0,
+    actions: Object.fromEntries(DETAIL_ACTIONS.map((action) => [action, 0])),
   };
 
   const failures = [];
@@ -330,7 +282,7 @@ export async function runParallelDetailScrape() {
         `[worker-${workerId}] started batch ${batch.batchNumber}/${batches.length} (${batch.urls.length} items)`
       );
 
-      for (const url of batch.urls) {
+      for (const { url, removedReason: previousReason } of batch.urls) {
         if (!url) {
           counters.skipped += 1;
           counters.seen += 1;
@@ -339,95 +291,24 @@ export async function runParallelDetailScrape() {
 
         try {
           const scraped = await scrapeDetail(page, url);
-          const metrics = deriveDetailMetrics(scraped);
-          const rating = metrics.rating;
-          const engagement = metrics.engagement;
-          const ai = metrics.ai;
-          const language = await detectLanguageIso3(scraped.languageText);
-          const sourceTags = Array.isArray(scraped.sourceTags) ? scraped.sourceTags : [];
+          const result = await applyDetailResult(d1, url, scraped, { detectLanguage, previousReason, dryRun });
+          counters.actions[result.action] += 1;
 
-          const matchedExcludedTag = sourceTags.find((tag) =>
-            DETAIL_EXCLUDED_TAGS.has(String(tag || "").trim().toLowerCase())
-          );
-
-          if (matchedExcludedTag) {
-            const hasOverrideSignal = hasStrongRatingAndEngagement(rating, engagement);
-            if (hasOverrideSignal) {
+          if (result.removedReason) {
+            const detail = result.removedReason === "excluded_tag" ? ` (${result.excludedTag})` : "";
+            console.log(`[worker-${workerId}] hid ${url}: ${result.removedReason}${detail}`);
+          } else {
+            if (result.excludedTag) {
               console.log(
-                `[worker-${workerId}] allowed ${url} despite excluded tag (${matchedExcludedTag}) due to strong rating/engagement`
+                `[worker-${workerId}] allowed ${url} despite excluded tag (${result.excludedTag}) due to strong rating/engagement`
               );
-            } else {
-            if (!dryRun) {
-              await d1.execute("DELETE FROM items WHERE url = ?", [url]);
             }
-
-            counters.removedExcludedTag += 1;
             console.log(
-              `[worker-${workerId}] removed ${url} due to excluded tag (${matchedExcludedTag})`
-            );
-            counters.seen += 1;
-
-            if (cooldownMs > 0) {
-              await sleep(cooldownMs);
-            }
-
-            continue;
-            }
-          }
-
-          if (String(ai || "").trim().toLowerCase() === "ai assisted") {
-            if (!dryRun) {
-              await d1.execute("DELETE FROM items WHERE url = ?", [url]);
-            }
-
-            counters.removedAiAssisted += 1;
-            console.log(`[worker-${workerId}] removed ${url} due to ai assisted flag`);
-            counters.seen += 1;
-
-            if (cooldownMs > 0) {
-              await sleep(cooldownMs);
-            }
-
-            continue;
-          }
-
-          if (shouldRemoveForLowRating(rating)) {
-            if (!dryRun) {
-              await d1.execute("DELETE FROM items WHERE url = ?", [url]);
-            }
-
-            counters.removedLowRating += 1;
-            console.log(
-              `[worker-${workerId}] removed ${url} due to low rating signal (${rating})`
-            );
-            counters.seen += 1;
-
-            if (cooldownMs > 0) {
-              await sleep(cooldownMs);
-            }
-
-            continue;
-          }
-
-          if (!dryRun) {
-            await d1.execute(
-              `UPDATE items
-               SET rating = ?,
-                   engagement = ?,
-                   ai = ?,
-                   language = ?,
-                   updated_at = CURRENT_TIMESTAMP
-               WHERE url = ?`,
-              [rating, engagement, ai, language, url]
+              `[worker-${workerId}] ${result.action} ${url} | rating=${result.rating ?? "null"} | engagement=${result.engagement} | ai=${result.ai ?? "null"} | language=${result.language ?? "null"}`
             );
           }
-
-          counters.updated += 1;
-          console.log(
-            `[worker-${workerId}] updated ${url} | rating=${rating ?? "null"} | engagement=${engagement} | ai=${ai ?? "null"} | language=${language ?? "null"}`
-          );
         } catch (error) {
-          counters.failed += 1;
+          counters.actions.failed += 1;
           const is404 = error?.status === 404 || /HTTP\s+404/i.test(String(error?.message || ""));
           if (is404) {
             notFoundUrls.add(url);
@@ -474,21 +355,18 @@ export async function runParallelDetailScrape() {
     } else {
       for (const missingUrl of notFoundUrls) {
         await d1.execute("DELETE FROM items WHERE url = ?", [missingUrl]);
-        counters.removed404 += 1;
+        counters.actions.removed_404 += 1;
       }
-      console.log(`[cleanup] deleted ${counters.removed404} URL(s) that returned HTTP 404`);
+      console.log(`[cleanup] deleted ${counters.actions.removed_404} URL(s) that returned HTTP 404`);
     }
   }
 
   console.log("\n=== Detail Summary ===");
   console.log(`Rows seen: ${counters.seen}`);
-  console.log(`Rows updated: ${counters.updated}`);
-  console.log(`Rows removed due to excluded tags: ${dryRun ? 0 : counters.removedExcludedTag}`);
-  console.log(`Rows removed due to ai assisted: ${dryRun ? 0 : counters.removedAiAssisted}`);
-  console.log(`Rows removed due to low rating: ${dryRun ? 0 : counters.removedLowRating}`);
-  console.log(`Rows failed: ${counters.failed}`);
+  for (const [action, count] of Object.entries(counters.actions)) {
+    console.log(`Rows ${action}: ${count}`);
+  }
   console.log(`Rows skipped (no url): ${counters.skipped}`);
-  console.log(`Rows removed due to 404: ${dryRun ? 0 : counters.removed404}`);
   console.log(`Batches completed: ${counters.completedBatches}/${batches.length}`);
 
   if (failures.length > 0) {

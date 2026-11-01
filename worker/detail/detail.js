@@ -1,4 +1,6 @@
+import { detectAll } from "tinyld";
 import {
+  DETAIL_ACTIONS,
   WorkerD1Client,
   parseDetailFromHtml,
   runSingleDetailStep,
@@ -29,9 +31,44 @@ function parseOptions(request, body = null, env = {}) {
   return {
     dryRun: toBool(source.dryRun ?? query.get("dryRun"), false),
     staleDays: Math.max(1, toInt(source.staleDays ?? query.get("staleDays"), toInt(env.DETAIL_STALE_DAYS, 7))),
-    cursorKey: String(source.cursorKey ?? query.get("cursorKey") ?? env.DETAIL_CURSOR_KEY ?? "detail_cursor").trim() || "detail_cursor",
     requestTimeoutMs: Math.max(1000, toInt(source.requestTimeoutMs ?? query.get("requestTimeoutMs"), toInt(env.DETAIL_REQUEST_TIMEOUT_MS, 15000))),
   };
+}
+
+// cld (used by scripts/detail.mjs) is a native module, so the worker uses tinyld.
+// Same contract: ISO 639-1 code, English stored as null, null when unsure.
+function detectLanguage(rawText) {
+  const normalized = String(rawText || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+
+  const letterCount = (normalized.match(/\p{L}/gu) || []).length;
+  if (letterCount < 120) return null;
+
+  const [top, second] = detectAll(normalized);
+  const langCode = String(top?.lang || "").trim().toLowerCase();
+  if (!langCode || langCode === "en") return null;
+
+  // Mixed-language pages (e.g. EN + PT side by side) split the score; require a clear winner.
+  const topAccuracy = Number(top.accuracy) || 0;
+  const secondAccuracy = Number(second?.accuracy) || 0;
+  if (topAccuracy < 0.3 || topAccuracy - secondAccuracy < 0.15) return null;
+
+  // tinyld can name a non-Latin language for Latin text (e.g. Hindi for English with Swedish names),
+  // so the text has to actually be written in the language's script.
+  const latinShare = (normalized.match(/\p{Script=Latin}/gu) || []).length / letterCount;
+  const script = languageScript(langCode);
+  if (script === "Latn" && latinShare < 0.5) return null;
+  if (script && script !== "Latn" && latinShare > 0.8) return null;
+
+  return langCode;
+}
+
+function languageScript(langCode) {
+  try {
+    return new Intl.Locale(langCode).maximize().script || null;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchAndParseDetail(url, requestTimeoutMs, userAgent) {
@@ -82,20 +119,19 @@ async function runDetailStep(env, options) {
       db,
       dryRun: options.dryRun,
       staleDays: options.staleDays,
-      cursorKey: options.cursorKey,
+      // Dry runs write nothing, so without this every step would pick the same row.
+      skipUrls: runs.map((row) => row.processed_url),
       fetchDetail: (url) => fetchAndParseDetail(url, options.requestTimeoutMs, userAgent),
+      detectLanguage: async (text) => detectLanguage(text),
     });
     runs.push(stepSummary);
   }
 
-  const aggregate = {
-    attempted_steps: runs.length,
-    updated: runs.filter((row) => row.action === "updated").length,
-    removed_404: runs.filter((row) => row.action === "removed_404").length,
-    removed_low_rating: runs.filter((row) => row.action === "removed_low_rating").length,
-    failed: runs.filter((row) => row.action === "failed").length,
-    empty: runs.filter((row) => row.action === "none").length,
-  };
+  const aggregate = { attempted_steps: runs.length };
+  for (const action of DETAIL_ACTIONS) {
+    aggregate[action] = runs.filter((row) => row.action === action).length;
+  }
+  aggregate.empty = runs.filter((row) => row.action === "none").length;
 
 console.log({
     fetches_per_request: total,
@@ -143,7 +179,6 @@ export default {
     const options = {
       dryRun: false,
       staleDays: Math.max(1, toInt(env.DETAIL_STALE_DAYS, 7)),
-      cursorKey: String(env.DETAIL_CURSOR_KEY || "detail_cursor"),
       requestTimeoutMs: Math.max(1000, toInt(env.DETAIL_REQUEST_TIMEOUT_MS, 15000)),
     };
 

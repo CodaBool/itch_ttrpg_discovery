@@ -2,6 +2,13 @@ name = 'itch-ttrpg-discovery-detail'
 main = "detail.js"
 compatibility_date = "2026-07-06"
 
+[vars]
+# Days before an already-checked item is scraped again. New items are always checked first.
+DETAIL_STALE_DAYS = "3"
+# Per-page fetch timeout in ms.
+DETAIL_REQUEST_TIMEOUT_MS = "15000"
+DETAIL_USER_AGENT = "itch-rpg-feed-detail-worker/1.0"
+
 [triggers]
 crons = ["* * * * *"]
 

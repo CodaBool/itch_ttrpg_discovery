@@ -1,4 +1,5 @@
 export function toInt(value, fallback) {
+  if (value == null || String(value).trim() === "") return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? Math.floor(n) : fallback;
 }
@@ -14,13 +15,22 @@ export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function decodeCodePoint(match, code) {
+  // fromCodePoint throws past U+10FFFF, which would fail the whole page parse.
+  return Number.isInteger(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
+}
+
 function decodeHtmlEntities(value) {
+  // &amp; goes last so "&amp;lt;" decodes once to "&lt;", not twice to "<".
   return String(value || "")
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'")
-    .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#(\d+);/g, (match, code) => decodeCodePoint(match, Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (match, code) => decodeCodePoint(match, parseInt(code, 16)))
+    .replace(/&amp;/g, "&");
 }
 
 function countMatches(input, regex) {
@@ -69,43 +79,110 @@ export function parseDetailFromHtml(html) {
   const hasNoAi = /href=["'][^"']*tag-no-ai[^"']*["']/i.test(raw);
   const hasAiAssisted = /href=["'][^"']*ai-assisted[^"']*["']/i.test(raw);
 
-
-  const tags = extractItchTags(raw);
-    console.log("tags", tags);
+  const sourceTags = [...raw.matchAll(/href=["'][^"']*\/tag-([^/?#"']+)/gi)]
+    .map((match) => String(match[1] || "").trim().toLowerCase())
+    .filter(Boolean);
 
   return {
     ratingTooltip,
     topicCount,
     commentCount,
     ai: hasAiAssisted ? "ai assisted" : hasNoAi ? "no ai" : null,
+    sourceTags,
+    languageText: extractLanguageText(raw),
   };
 }
 
-function extractItchTags(raw) {
-  const tableRowMatches = raw.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) || [];
+// Mirrors the title + meta description + description text that scripts/detail.mjs reads from the DOM.
+function extractLanguageText(raw) {
+  const title =
+    raw.match(/<h1\b[^>]*class=["'][^"']*\bgame_title\b[^"']*["'][^>]*>([\s\S]*?)<\/h1>/i)?.[1] ||
+    raw.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] ||
+    "";
+  const metaTag = raw.match(/<meta\b[^>]*name=["']description["'][^>]*>/i)?.[0] || "";
+  const metaDescription = metaTag.match(/content=(['"])([\s\S]*?)\1/i)?.[2] || "";
 
-  const tagsRow = tableRowMatches.find(row => {
-    const cells = row.match(/<td\b[^>]*>[\s\S]*?<\/td>/gi) || [];
-    const label = stripHtml(cells[0] || "").trim();
-    return label === "Tags";
-  });
+  return stripHtml(`${title} ${decodeHtmlEntities(metaDescription)} ${extractDivContent(raw, "formatted_description")}`)
+    .trim()
+    .slice(0, 8000);
+}
 
-  if (!tagsRow) return [];
+// Returns the inner HTML of the first div with the class, walking nested divs to find its closing tag.
+function extractDivContent(raw, className) {
+  const open = new RegExp(`<div\\b[^>]*class=["'][^"']*\\b${className}\\b[^"']*["'][^>]*>`, "i").exec(raw);
+  if (!open) return "";
 
-  const cells = tagsRow.match(/<td\b[^>]*>[\s\S]*?<\/td>/gi) || [];
-  const valueCell = cells[1] || "";
+  const start = open.index + open[0].length;
+  const divTag = /<(\/?)div\b[^>]*>/gi;
+  divTag.lastIndex = start;
 
-  return [...valueCell.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)]
-    .map(match => stripHtml(match[1]).trim())
-    .filter(Boolean);
+  let depth = 1;
+  let match;
+  while ((match = divTag.exec(raw))) {
+    depth += match[1] ? -1 : 1;
+    if (depth === 0) {
+      return raw.slice(start, match.index).replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, " ");
+    }
+  }
+  return "";
 }
 
 function stripHtml(value) {
   return decodeHtmlEntities(
     String(value || "")
-      .replace(/<[^>]*>/g, "")
+      .replace(/<[^>]*>/g, " ")
       .replace(/\s+/g, " "),
   );
+}
+
+export const DETAIL_EXCLUDED_TAGS = new Set([
+  "vtt-battlemaps",
+  "foundry-vtt",
+  "solo-rpg",
+  "solo-rpgs",
+  "solo",
+  "solo-game",
+  "solo-games",
+  "solo-ttrpg",
+  "singleplayer",
+  "single-player",
+  "singleplayer-rpg",
+  "singleplayer-ttrpg",
+  "single-player-ttrpg",
+  "journaling",
+  "journaling-rpg",
+  "dnd5e",
+  "dungeons-and-dragsons",
+  "larp",
+  "pathfinder",
+  "diceless",
+  "gm-less",
+  "lancer",
+]);
+
+export function findExcludedTag(sourceTags) {
+  if (!Array.isArray(sourceTags)) return null;
+  return sourceTags.find((tag) => DETAIL_EXCLUDED_TAGS.has(String(tag || "").trim().toLowerCase())) || null;
+}
+
+export function hasStrongRatingAndEngagement(rating, engagement) {
+  const value = String(rating || "").trim();
+  if (!value.includes("over")) return false;
+
+  const parts = value.split("over");
+  if (parts.length !== 2) return false;
+
+  const average = Number(parts[0]);
+  const count = Number(parts[1]);
+  const positiveCount = Number.isFinite(average) && average >= 4 && Number.isFinite(count)
+    ? Math.max(0, Math.floor(count))
+    : 0;
+
+  const engagementCount = Number.isFinite(Number(engagement))
+    ? Math.max(0, Math.floor(Number(engagement)))
+    : 0;
+
+  return positiveCount >= 3 && engagementCount >= 1;
 }
 
 export function deriveDetailMetrics(scraped) {
@@ -118,6 +195,56 @@ export function deriveDetailMetrics(scraped) {
     engagement: Number.isFinite(engagement) ? engagement : 0,
     ai,
   };
+}
+
+// The rules an item can fail, in the order they are checked. Each one is stored as items.removed_reason.
+export const REMOVAL_REASONS = ["excluded_tag", "ai_assisted", "low_rating"];
+
+// Every action a detail check can report, so callers can count them without listing each one.
+export const DETAIL_ACTIONS = [
+  "updated",
+  "restored",
+  ...REMOVAL_REASONS.map((reason) => `removed_${reason}`),
+  "removed_404",
+  "failed",
+];
+
+function findRemovalReason(metrics, excludedTag) {
+  if (excludedTag && !hasStrongRatingAndEngagement(metrics.rating, metrics.engagement)) return "excluded_tag";
+  if (String(metrics.ai || "").trim().toLowerCase() === "ai assisted") return "ai_assisted";
+  if (shouldRemoveForLowRating(metrics.rating)) return "low_rating";
+  return null;
+}
+
+// Applies the rules to one scraped page and saves the result. A failing item is hidden rather than
+// deleted, so ingest can't re-add it, and a hidden item that passes a later check is shown again.
+// removed_at keeps the first hide time. previousReason is the row's removed_reason before this check.
+export async function applyDetailResult(db, url, scraped, { detectLanguage, previousReason = null, dryRun = false }) {
+  const metrics = deriveDetailMetrics(scraped);
+  const excludedTag = findExcludedTag(scraped?.sourceTags);
+  const removedReason = findRemovalReason(metrics, excludedTag);
+  const language = await detectLanguage(scraped?.languageText);
+
+  if (!dryRun) {
+    await db.execute(
+      `UPDATE items
+       SET rating = ?,
+           engagement = ?,
+           ai = ?,
+           language = ?,
+           removed_reason = ?,
+           removed_at = CASE WHEN ? IS NULL THEN NULL ELSE coalesce(removed_at, CURRENT_TIMESTAMP) END,
+           detail_checked_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE url = ?`,
+      [metrics.rating, metrics.engagement, metrics.ai, language, removedReason, removedReason, url]
+    );
+  }
+
+  let action = previousReason ? "restored" : "updated";
+  if (removedReason) action = `removed_${removedReason}`;
+
+  return { ...metrics, language, excludedTag, removedReason, action };
 }
 
 export class CloudflareD1Client {
@@ -187,71 +314,35 @@ export class WorkerD1Client {
   }
 }
 
-async function readCursorState(db, key) {
-  const rows = await db.select("SELECT value FROM ingest_state WHERE key = ?", [key]);
-  const value = Number(rows?.[0]?.value || "0");
-  if (!Number.isFinite(value) || value < 0) return 0;
-  return Math.floor(value);
-}
-
-async function writeCursorState(db, key, value) {
-  await db.execute(
-    `INSERT INTO ingest_state (key, value, updated_at)
-     VALUES (?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(key) DO UPDATE SET
-       value = excluded.value,
-       updated_at = CURRENT_TIMESTAMP`,
-    [key, String(value)]
-  );
-}
-
+// Picks the item whose detail scrape is most overdue: never-checked items first (newest first),
+// then the oldest check that is at least staleDays old. Returns row = null when nothing is due.
 export async function selectNextDetailTarget(db, options = {}) {
-  const cursorKey = String(options.cursorKey || "detail_cursor").trim() || "detail_cursor";
   const staleDays = Math.max(1, toInt(options.staleDays, 7));
   const staleModifier = `-${staleDays} days`;
+  const skipUrls = Array.isArray(options.skipUrls) ? options.skipUrls.filter(Boolean) : [];
+  const skipClause = skipUrls.length > 0 ? `AND url NOT IN (${skipUrls.map(() => "?").join(", ")})` : "";
 
-  const totalRows = await db.select(
-    "SELECT COUNT(*) AS count FROM items WHERE trim(coalesce(url, '')) <> ''"
-  );
-  const total = Number(totalRows?.[0]?.count || 0);
+  const dueWhere = `trim(coalesce(url, '')) <> ''
+       AND (detail_checked_at IS NULL OR datetime(detail_checked_at) <= datetime('now', ?))`;
 
-  if (!Number.isFinite(total) || total <= 0) {
-    return {
-      cursorKey,
-      total: 0,
-      currentCursor: 0,
-      nextCursor: 0,
-      row: null,
-      staleDays,
-    };
-  }
-
-  const currentCursor = (await readCursorState(db, cursorKey)) % total;
+  const dueRows = await db.select(`SELECT COUNT(*) AS count FROM items WHERE ${dueWhere}`, [staleModifier]);
   const rows = await db.select(
-    `SELECT url, updated_at, first_seen_at
+    `SELECT url, detail_checked_at, first_seen_at, removed_reason
      FROM items
-     WHERE trim(coalesce(url, '')) <> ''
+     WHERE ${dueWhere}
+       ${skipClause}
      ORDER BY
-       CASE
-         WHEN datetime(updated_at) <= datetime('now', ?) THEN 1
-         ELSE 0
-       END ASC,
-       datetime(updated_at) ASC,
-       datetime(first_seen_at) ASC,
+       CASE WHEN detail_checked_at IS NULL THEN 0 ELSE 1 END ASC,
+       CASE WHEN detail_checked_at IS NULL THEN datetime(first_seen_at) END DESC,
+       datetime(detail_checked_at) ASC,
        url ASC
-     LIMIT 1 OFFSET ?`,
-    [staleModifier, currentCursor]
+     LIMIT 1`,
+    [staleModifier, ...skipUrls]
   );
-
-  const row = rows?.[0] || null;
-  const nextCursor = (currentCursor + 1) % total;
 
   return {
-    cursorKey,
-    total,
-    currentCursor,
-    nextCursor,
-    row,
+    due: Number(dueRows?.[0]?.count || 0),
+    row: rows?.[0] || null,
     staleDays,
   };
 }
@@ -260,8 +351,9 @@ export async function runSingleDetailStep(options) {
   const {
     db,
     fetchDetail,
-    cursorKey = "detail_cursor",
+    detectLanguage = async () => null,
     staleDays = 7,
+    skipUrls = [],
     dryRun = false,
   } = options || {};
 
@@ -274,23 +366,21 @@ export async function runSingleDetailStep(options) {
   }
 
   const startedAt = new Date().toISOString();
-  const plan = await selectNextDetailTarget(db, { cursorKey, staleDays });
+  const plan = await selectNextDetailTarget(db, { staleDays, skipUrls });
 
   const summary = {
     started_at: startedAt,
     dry_run: Boolean(dryRun),
-    cursor_key: plan.cursorKey,
-    total_candidates: plan.total,
-    cursor: plan.currentCursor,
-    next_cursor: plan.nextCursor,
+    due: plan.due,
     stale_days: plan.staleDays,
     processed_url: null,
     action: "none",
     rating: null,
     engagement: null,
     ai: null,
-    removed_404: false,
-    removed_low_rating: false,
+    language: null,
+    excluded_tag: null,
+    removed_reason: null,
     error: null,
     finished_at: null,
   };
@@ -305,48 +395,38 @@ export async function runSingleDetailStep(options) {
 
   try {
     const scraped = await fetchDetail(url);
-    const metrics = deriveDetailMetrics(scraped);
+    const result = await applyDetailResult(db, url, scraped, {
+      detectLanguage,
+      previousReason: plan.row.removed_reason,
+      dryRun,
+    });
 
-    summary.rating = metrics.rating;
-    summary.engagement = metrics.engagement;
-    summary.ai = metrics.ai;
-
-    if (shouldRemoveForLowRating(metrics.rating)) {
-      if (!dryRun) {
-        await db.execute("DELETE FROM items WHERE url = ?", [url]);
-      }
-      summary.action = "removed_low_rating";
-      summary.removed_low_rating = true;
-    } else {
-      if (!dryRun) {
-        await db.execute(
-          `UPDATE items
-           SET rating = ?,
-               engagement = ?,
-               ai = ?,
-               updated_at = CURRENT_TIMESTAMP
-           WHERE url = ?`,
-          [metrics.rating, metrics.engagement, metrics.ai, url]
-        );
-      }
-      summary.action = "updated";
-    }
+    summary.action = result.action;
+    summary.rating = result.rating;
+    summary.engagement = result.engagement;
+    summary.ai = result.ai;
+    summary.language = result.language;
+    summary.excluded_tag = result.excludedTag;
+    summary.removed_reason = result.removedReason;
   } catch (error) {
     const status = Number(error?.status);
     const is404 = status === 404 || /HTTP\s*404/i.test(String(error?.message || ""));
 
     if (is404) {
+      // A deleted page drops out of itch search too, so ingest won't re-add it.
       if (!dryRun) {
         await db.execute("DELETE FROM items WHERE url = ?", [url]);
       }
       summary.action = "removed_404";
-      summary.removed_404 = true;
     } else {
       summary.action = "failed";
       summary.error = error instanceof Error ? error.message : String(error || "unknown error");
+
+      // Mark it checked anyway so a page that keeps failing waits staleDays instead of blocking the queue.
+      if (!dryRun) {
+        await db.execute("UPDATE items SET detail_checked_at = CURRENT_TIMESTAMP WHERE url = ?", [url]);
+      }
     }
-  } finally {
-    await writeCursorState(db, plan.cursorKey, plan.nextCursor);
   }
 
   summary.finished_at = new Date().toISOString();

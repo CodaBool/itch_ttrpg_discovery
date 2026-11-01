@@ -83,6 +83,7 @@ async function loadItems(env) {
       url, source, title, description, image_url, price, publish_date, update_date,
       author, author_url, language, rating, engagement, ai, first_seen_at, updated_at
      FROM items
+     WHERE removed_at IS NULL
      ORDER BY updated_at DESC
      LIMIT 6000`
   ).all();

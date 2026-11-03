@@ -9,7 +9,7 @@ Discovery site for new indie TTRPGs on itch.io. All parts share one Cloudflare D
 | API + ingest worker | `worker/src/index.js` | `wrangler.toml` | Serves `/api/*`. Cron runs one itch `newest/*.xml` search per minute, with a cursor kept in `ingest_state`. |
 | Detail worker | `worker/detail/detail.js` | `worker/detail/wrangler.toml` | Cron scrapes 5 item pages a minute for rating, engagement, AI disclosure, tags, and language. Hides items that fail the rules and deletes items whose page is gone. |
 | Email worker | `worker/email/email.js` | `worker/email/wrangler.toml` | Sends the monthly newsletter through an external mail worker and handles unsubscribe. |
-| Frontend | `src/main.jsx` → `src/App.jsx` | `wrangler.frontend.toml`, `vite.config.js` | React 19 + Tailwind 4 SPA (discover, newsletter builder, jams). Deployed as static assets from `dist/`. |
+| Frontend | `src/main.jsx` → `src/App.jsx` | `wrangler.frontend.toml`, `vite.config.js` | React 19 + Tailwind 4 SPA (discover, newsletter builder, jams). Deployed as static assets from `dist/` by Cloudflare's git integration when you push, so files in `public/` must be committed to go live. The newsletter links to `public/ennie.webp`. |
 | Local scripts | `scripts/*.mjs` | env vars | Write to D1 through the Cloudflare HTTP API. `local.mjs` drives the user's logged-in Chrome over CDP on port 9222; `detail.mjs` launches its own headless Puppeteer. |
 
 The routes, crons, and vars of all three workers are documented in `worker/src/readme.md`, and the local scraper setup in `scripts/readme.md`. Update those docs when you change a route, a response shape, or an env var.
@@ -20,6 +20,7 @@ For quarterly itch jam discovery, candidate review, or ongoing jam count updates
 
 - `worker/detail/shared.js` is imported by both the detail worker and `scripts/detail.mjs`. Keep it runtime-neutral, so it works in both Workers and Node.
 - `worker/src/newsletter.js` is imported by the API worker (newsletter preview) and the email worker (the actual send).
+- `src/awards.js` is imported by the Jams page and by `worker/src/newsletter.js`, which shows the ENNIE badge while the list has an `ENNIE` entry for the current year. Keep it plain data so it bundles in both.
 - These constants are copied by hand between files. When you change one copy, update all of them:
   - The tag and category lists (`PAIR_TAGS`, `SOLO_TAGS`, `CATEGORIES`, `SEARCH_DEFINITIONS`) live in `worker/src/index.js` and `scripts/local.mjs`.
   - The system → tag map lives in `SYSTEM_DEFINITIONS` and `QUERY_SYSTEM_KEY_BY_PARAM` in `src/App.jsx`, and in `SYSTEM_TAGS_BY_KEY` and `QUERY_PARAM_BY_SYSTEM_KEY` in `worker/src/newsletter.js`.

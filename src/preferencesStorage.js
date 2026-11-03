@@ -24,7 +24,6 @@ export function loadPreferenceDraft(defaultSystems) {
   const fallback = {
     email: "",
     systems: defaultSystems,
-    majorAwards: true,
     englishOnly: true,
     minRatings: DEFAULT_MIN_RATINGS,
     addGameAssets: true,
@@ -44,7 +43,6 @@ export function loadPreferenceDraft(defaultSystems) {
     return {
       email: String(parsed.email || "").trim(),
       systems: normalizeSystems(defaultSystems, parsed.systems),
-      majorAwards: parsed.majorAwards !== false,
       englishOnly: parsed.englishOnly !== false,
       minRatings: Number.isFinite(Number(parsed.minRatings))
         ? Math.max(0, Math.min(10, Math.floor(Number(parsed.minRatings))))

@@ -45,8 +45,6 @@ export default function PreferenceForm({
   onSystemFocusToggle,
   englishOnly = true,
   onEnglishOnlyChange,
-  majorAwards = true,
-  onMajorAwardsChange,
   addGameAssets = true,
   onAddGameAssetsChange,
   addToolsMiscGameMods = true,
@@ -117,16 +115,6 @@ export default function PreferenceForm({
 
         {includeNewsletterExtras ? (
           <>
-            <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
-              <input
-                type="checkbox"
-                checked={majorAwards}
-                onChange={(event) => onMajorAwardsChange?.(event.target.checked)}
-                className={`h-4 w-4 ${styles.accentClass}`}
-              />
-              <span className="font-semibold uppercase tracking-[0.12em]">Add RPG Award Releases</span>
-            </label>
-
             <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200">
               <input
                 type="checkbox"

@@ -1,3 +1,5 @@
+import { AWARDS } from "../../src/awards.js";
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NEWSLETTER_WINDOW_DAYS = 30;
 
@@ -52,6 +54,12 @@ const LEVEL_REQUIREMENTS = {
   5: { minPositive: 0, minEngagement: 0 },
 };
 
+// Returns this year's ENNIE entry from src/awards.js, or null until one is added.
+function findEnnieAward(now = new Date()) {
+  const year = now.getUTCFullYear();
+  return AWARDS.find((award) => award.title === "ENNIE" && award.year === year) || null;
+}
+
 function coerceLevel(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return DEFAULT_LEVEL;
@@ -75,7 +83,6 @@ function normalizePreferenceForNewsletter(rawPreference = {}) {
   return {
     title: String(rawPreference.title || "Your Indie TTRPG Digest").trim() || "Your Indie TTRPG Digest",
     systems: normalizeSystemScores(rawPreference.systems),
-    majorAwards: rawPreference.majorAwards !== false,
     englishOnly: rawPreference.englishOnly !== false,
     minRatings: Number.isFinite(Number(rawPreference.minRatings))
       ? Math.max(0, Math.min(10, Math.floor(Number(rawPreference.minRatings))))
@@ -98,7 +105,6 @@ function buildTweakPreferencesUrl(preference) {
 
   params.set("min", String(normalizedPreference.minRatings));
   params.set("en", normalizedPreference.englishOnly ? "1" : "0");
-  params.set("award", normalizedPreference.majorAwards ? "1" : "0");
   params.set("asset", normalizedPreference.addGameAssets ? "1" : "0");
   params.set("misc", normalizedPreference.addToolsMiscGameMods ? "1" : "0");
 
@@ -382,8 +388,23 @@ export function filterNewsletterItems(items, rawPreference = {}, now = new Date(
   });
 }
 
-export function buildNewsletterHtml(items, rawPreference = {}) {
+// Served by the frontend worker from public/.
+const ENNIE_LOGO_URL = "https://discover.codabool.workers.dev/ennie.webp";
+const ENNIE_ICON_SIZE = 44;
+
+function buildEnnieBadgeHtml(ennieAward) {
+  if (!ennieAward) return "";
+
+  return `
+          <a href="${escapeHtml(ennieAward.url)}" target="_blank" rel="noopener noreferrer" style="flex-shrink:0; text-align:center; text-decoration:none; color:#92400e;">
+            <img src="${ENNIE_LOGO_URL}" alt="ENNIE award" width="${ENNIE_ICON_SIZE}" height="${ENNIE_ICON_SIZE}" style="display:block; margin:0 auto; width:${ENNIE_ICON_SIZE}px; height:${ENNIE_ICON_SIZE}px; border:0;" />
+            <span style="display:block; margin-top:4px; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;">ENNIES ${escapeHtml(String(ennieAward.year))}</span>
+          </a>`;
+}
+
+export function buildNewsletterHtml(items, rawPreference = {}, ennieAward = null) {
   const preference = normalizePreferenceForNewsletter(rawPreference);
+  const ennieBadgeHtml = buildEnnieBadgeHtml(ennieAward);
   const tweakPreferencesUrl = buildTweakPreferencesUrl(preference);
   const uniqueArtistCount = new Set(items.map((item) => normalizeAuthor(item.author)).filter(Boolean)).size;
 
@@ -513,7 +534,9 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
   <body style="margin:0; padding:24px 12px; background:#f1f5f9;">
     <div style="max-width:1200px; margin:0 auto; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
       <div style="padding:20px 18px 12px 18px; font-family: Arial, sans-serif; color:#0f172a;">
-        <h1 style="margin:0; font-size:30px; line-height:1.2;">${escapeHtml(preference.title)}</h1>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+          <h1 style="margin:0; font-size:30px; line-height:1.2;">${escapeHtml(preference.title)}</h1>${ennieBadgeHtml}
+        </div>
         <p style="margin:8px 0 0 0; color:#475569; font-size:13px;">From the last 30 days</p>
         <div style="margin-top:12px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; border:1px solid #cbd5e1; border-radius:10px; background:#ffffff; padding:12px 14px;">
           <p style="margin:0; color:#0f172a; font-size:15px; font-weight:700;">${escapeHtml(String(uniqueArtistCount))} artists made something right up your alley!</p>
@@ -534,7 +557,7 @@ export function buildNewsletterHtml(items, rawPreference = {}) {
 
 export function prepareNewsletterPreview(items, preference = {}, now = new Date()) {
   const filtered = filterNewsletterItems(items, preference, now);
-  const html = buildNewsletterHtml(filtered, preference);
+  const html = buildNewsletterHtml(filtered, preference, findEnnieAward(now));
 
   return {
     items: filtered,

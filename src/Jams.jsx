@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { AWARDS } from "./awards.js";
 
 const JAM_ENTRIES = [
   {
@@ -564,90 +565,6 @@ const JAM_ENTRIES = [
 // { rank: 38, year: 2025, title: "Carved From Brindlewood Winter Jam 2025", url: "https://itch.io/jam/carved-from-bindlewood-jam-2025", signal: "15 entries", description: "Brindlewood-focused jam for mysteries, games, supplements, and related material." },
 // { rank: 40, year: 2024, title: "Liminal Horror Halloween Monster Jam", url: "https://itch.io/jam/liminal-horror-halloween-monster-jam", signal: "21 entries", description: "Focused Liminal Horror monster jam for spooky, modern-horror creature material." },
 
-
-const AWARDS = [
-  {
-  year: 2022,
-  title: "The Awards",
-  url: "https://theawards.games/?page_id=1051",
-  description: "Award",
-  signal: "",
-},
-  {
-  year: 2023,
-  title: "The Awards",
-  url: "https://theawards.games/?page_id=1089",
-  description: "Award",
-  signal: "",
-},
-  {
-  year: 2024,
-  title: "The Awards",
-  url: "https://theawards.games/?page_id=1182",
-  description: "Award",
-  signal: "",
-},
-
-
-
-
-  {
-  year: 2026,
-  title: "ENNIE",
-  url: "https://ennie-awards.com/2026-nominees/",
-  description: "Award",
-  signal: "",
-},
-  {
-    year: 2025,
-    title: "ENNIE",
-    url: "https://ennie-awards.com/portfolio-item/2025-nominees-and-winners/",
-    description: "Award",
-    signal: "",
-  },
-  {
-    year: 2024,
-    title: "ENNIE",
-    url: "https://ennie-awards.com/portfolio-item/2024-nominees-and-winners/",
-    description: "Award",
-    signal: "",
-  },
-    {
-    year: 2023,
-    title: "ENNIE",
-    url: "https://ennie-awards.com/portfolio-item/2023-nominees-and-winners/",
-    description: "Award",
-    signal: "",
-  },
-    {
-    year: 2022,
-    title: "ENNIE",
-    url: "https://ennie-awards.com/portfolio-item/2022-nominees-and-winners/",
-    description: "Award",
-    signal: "",
-  },
-    {
-    year: 2021,
-    title: "ENNIE",
-    url: "https://ennie-awards.com/portfolio-item/2021-nominees-and-winners/",
-    description: "Award",
-    signal: "",
-  },
-  {
-    year: 2024,
-    title: "CRITS",
-    url: "https://docs.google.com/document/d/1slfaVQ9pWKViZwT0JEaB-2uO5Sm0innGVVN_a2xCsw8",
-    description: "Award",
-    signal: "",
-  },
-  {
-    year: 2023,
-    title: "CRITS",
-    url: "https://docs.google.com/document/d/1DQ6LEjqMPpwXXmzjdHqne-i8VQ_8VD4ndHIlHiHMJqk",
-    description: "Award",
-    signal: "",
-  },
-];
 
 const YEAR_ORDER = [2026, 2025, 2024, 2023, 2022, 2021];
 

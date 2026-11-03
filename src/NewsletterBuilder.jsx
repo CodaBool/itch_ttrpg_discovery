@@ -38,7 +38,6 @@ export default function NewsletterBuilder({ onBack, systems = [], initialDraft =
     return {
       email: String(initialDraft.email || "").trim(),
       systems: initialDraft.systems && typeof initialDraft.systems === "object" ? initialDraft.systems : draft.systems,
-      majorAwards: initialDraft.majorAwards !== false,
       englishOnly: initialDraft.englishOnly !== false,
       minRatings: Number.isFinite(Number(initialDraft.minRatings))
         ? Math.max(0, Math.min(10, Math.floor(Number(initialDraft.minRatings))))
@@ -53,7 +52,6 @@ export default function NewsletterBuilder({ onBack, systems = [], initialDraft =
 
   const [email, setEmail] = useState(resolvedInitialDraft.email);
   const [systemScores, setSystemScores] = useState(resolvedInitialDraft.systems);
-  const [majorAwards, setMajorAwards] = useState(resolvedInitialDraft.majorAwards);
   const [englishOnly, setEnglishOnly] = useState(resolvedInitialDraft.englishOnly);
   const [minRatings, setMinRatings] = useState(() => {
     const value = Number(resolvedInitialDraft.minRatings);
@@ -81,14 +79,13 @@ export default function NewsletterBuilder({ onBack, systems = [], initialDraft =
     savePreferenceDraft({
       email,
       systems: systemScores,
-      majorAwards,
       englishOnly,
       minRatings,
       addGameAssets,
       addToolsMiscGameMods,
       excludedCreators,
     });
-  }, [email, systemScores, majorAwards, englishOnly, minRatings, addGameAssets, addToolsMiscGameMods, excludedCreators]);
+  }, [email, systemScores, englishOnly, minRatings, addGameAssets, addToolsMiscGameMods, excludedCreators]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -115,7 +112,6 @@ export default function NewsletterBuilder({ onBack, systems = [], initialDraft =
         body: JSON.stringify({
           title: "Your Indie TTRPG Digest",
           systems: systemScores,
-          majorAwards,
           englishOnly,
           minRatings,
           addGameAssets,
@@ -149,6 +145,14 @@ export default function NewsletterBuilder({ onBack, systems = [], initialDraft =
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    // Show the spinner as soon as a change lands, and drop any in-flight
+    // request so its result can't replace the spinner before the debounce fires.
+    if (previewAbortRef.current) {
+      previewAbortRef.current.abort();
+      previewAbortRef.current = null;
+    }
+    setPreviewLoading(true);
+
     const timeoutId = window.setTimeout(() => {
       runPreviewFetch();
     }, 1200);
@@ -156,7 +160,7 @@ export default function NewsletterBuilder({ onBack, systems = [], initialDraft =
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [systemScores, majorAwards, englishOnly, minRatings, addGameAssets, addToolsMiscGameMods, excludedCreators]);
+  }, [systemScores, englishOnly, minRatings, addGameAssets, addToolsMiscGameMods, excludedCreators]);
 
   useEffect(() => {
     return () => {
@@ -180,7 +184,6 @@ export default function NewsletterBuilder({ onBack, systems = [], initialDraft =
   function currentPreferencePayload() {
     return {
       systems: systemScores,
-      majorAwards,
       englishOnly,
       minRatings,
       addGameAssets,
@@ -324,8 +327,6 @@ export default function NewsletterBuilder({ onBack, systems = [], initialDraft =
               onSystemScoreChange={updateSystemScore}
               englishOnly={englishOnly}
               onEnglishOnlyChange={setEnglishOnly}
-              majorAwards={majorAwards}
-              onMajorAwardsChange={setMajorAwards}
               addGameAssets={addGameAssets}
               onAddGameAssetsChange={setAddGameAssets}
               addToolsMiscGameMods={addToolsMiscGameMods}
@@ -391,23 +392,9 @@ export default function NewsletterBuilder({ onBack, systems = [], initialDraft =
                   <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-400/70" />
                   <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-400/70" />
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-600">
-                    {previewCount} items
-                  </span>
-                  <button
-                    type="button"
-                    onClick={runPreviewFetch}
-                    disabled={previewLoading}
-                    className="inline-flex h-6 min-w-[92px] items-center justify-center rounded border border-black/20 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-700 transition hover:border-black/35 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {previewLoading ? (
-                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" aria-hidden="true" />
-                    ) : (
-                      "Regenerate Preview"
-                    )}
-                  </button>
-                </div>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-600">
+                  {previewCount} items
+                </span>
               </div>
 
               <div className="px-5 py-4 md:px-7">
@@ -423,12 +410,17 @@ export default function NewsletterBuilder({ onBack, systems = [], initialDraft =
                   </div>
                 </div>
 
-                <div className="overflow-hidden rounded-xl bg-white">
+                <div className="relative overflow-hidden rounded-xl bg-white">
                   <iframe
                     title="newsletter-html-preview"
                     srcDoc={previewHtml || "<html><body style='font-family: Arial, sans-serif; padding: 20px; color: #334155;'>Waiting for preview...</body></html>"}
                     className="h-[520px] w-full"
                   />
+                  {previewLoading ? (
+                    <div className="absolute inset-0 flex items-center justify-center bg-white">
+                      <span className="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-transparent" aria-label="Loading preview" />
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </section>

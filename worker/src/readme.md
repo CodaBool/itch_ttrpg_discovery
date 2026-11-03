@@ -89,7 +89,7 @@ Builds the newsletter for a set of preferences without sending it. It uses the s
 The JSON body is a preference object:
 - `title`
 - `systems`: a map of system key to score
-- `majorAwards`, `englishOnly`, `addGameAssets`, `addToolsMiscGameMods`: booleans, default `true`
+- `englishOnly`, `addGameAssets`, `addToolsMiscGameMods`: booleans, default `true`
 - `minRatings`: `0`-`10`
 - `excludedCreators`: an array of author names
 
@@ -311,3 +311,9 @@ Unsubscribes the email and returns an HTML confirmation page. This is the link i
 ## Cron
 
 `0 12 1 * *` sends each subscriber their newsletter on the 1st of the month. Mail goes out through the external mail worker at `email.codabool.workers.dev`, using `EMAIL_WORKER_SECRET`. Hidden items are left out.
+
+## ENNIE badge
+
+When `src/awards.js` has an `ENNIE` entry for the current UTC year, every newsletter shows the ENNIE logo to the right of its title, with the subtitle "ENNIES {year}", linking to that entry's `url`. The Jams page reads the same list. Nothing is fetched: add the year's entry by hand once the winners are posted, and the badge shows until the year changes. `findEnnieAward` in `worker/src/newsletter.js` does the lookup, so the preview and the monthly send always match.
+
+The logo is `public/ennie.webp`, linked from the frontend at `https://discover.codabool.workers.dev/ennie.webp` (`ENNIE_LOGO_URL`). The frontend deploys from git, so a new logo goes live once it's committed and pushed.

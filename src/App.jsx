@@ -130,7 +130,6 @@ function readDraftFromQuery(defaultSystems, searchParams) {
     const minRaw = searchParams.get("min");
     const enRaw = searchParams.get("en");
     const emailRaw = searchParams.get("email");
-    const awardRaw = searchParams.get("award");
     const assetRaw = searchParams.get("asset");
     const miscRaw = searchParams.get("misc");
     const excludeRaw = searchParams.get("exclude");
@@ -138,7 +137,6 @@ function readDraftFromQuery(defaultSystems, searchParams) {
     const draftFromQuery = {
         email: String(emailRaw || "").trim().toLowerCase(),
         systems,
-        majorAwards: parseQueryFlag(awardRaw, true),
         englishOnly: parseQueryFlag(enRaw, true),
         minRatings: parseQueryMinRating(minRaw, 5),
         addGameAssets: parseQueryFlag(assetRaw, true),
@@ -146,7 +144,7 @@ function readDraftFromQuery(defaultSystems, searchParams) {
         excludedCreators: parseQueryExcludedCreators(excludeRaw),
     };
 
-    if (minRaw != null || enRaw != null || emailRaw != null || awardRaw != null || assetRaw != null || miscRaw != null || excludeRaw != null) {
+    if (minRaw != null || enRaw != null || emailRaw != null || assetRaw != null || miscRaw != null || excludeRaw != null) {
         hasQueryPreferences = true;
     }
 
